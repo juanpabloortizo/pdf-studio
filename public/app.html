@@ -533,6 +533,7 @@
       <button class="btn sm" id="edBack">← Back</button>
       <span class="title" id="edTitle">Template</span>
       <span class="spacer"></span>
+      <button class="btn sm" id="edFormat" title="Format / beautify the HTML + CSS">✨ Format</button>
       <button class="btn sm" id="edRefresh">Refresh preview</button>
       <button class="btn sm" id="edDownload">Download PDF</button>
       <button class="btn sm primary" id="edSave">Save</button>
@@ -669,6 +670,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-html.min.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
 const origin = window.location.origin;
@@ -1130,6 +1134,18 @@ async function openEditor(name) {
   setTimeout(() => { cm.refresh(); renderPreview(); }, 50);
 }
 $("#edBack").onclick = () => { navigate("templates"); };
+// Formatea (beautify) el HTML + CSS pegado del editor.
+$("#edFormat").onclick = () => {
+  if (!cm) return;
+  if (!window.html_beautify) { toast("Formatter not loaded yet"); return; }
+  try {
+    const out = window.html_beautify(cm.getValue(), {
+      indent_size: 2, wrap_line_length: 0, preserve_newlines: true, max_preserve_newlines: 2,
+      css: { indent_size: 2 }, js: { indent_size: 2 },
+    });
+    cm.setValue(out); toast("Formatted ✓");
+  } catch (e) { toast("Could not format"); }
+};
 $("#edRefresh").onclick = renderPreview;
 $("#edSave").onclick = async () => {
   await fetch("/api/template/" + currentName, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html: cm.getValue() }) });
