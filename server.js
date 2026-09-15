@@ -68,7 +68,7 @@ app.get("/docs", page("docs.html"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 // Enlace público compartible de un PDF (SIN API key): se abre en el navegador.
-// El token se crea desde /v1/create ("share": true) o /v1/generations/:id/share.
+// El token se crea con "share": true en /v1/create.
 app.get("/s/:token", (req, res) => {
   const s = store.resolveShare(req.params.token);
   if (!s) return res.status(404).type("html").send("<!doctype html><meta charset=utf-8><title>Link unavailable</title><body style='font-family:system-ui;text-align:center;padding:80px;color:#374151'><h1>Link expired or not found</h1><p>This shared document is no longer available.</p>");
@@ -523,24 +523,6 @@ function buildOpenApi(origin) {
           },
         },
       },
-      "/v1/generations/{transaction_id}/share": {
-        post: {
-          tags: ["Share"],
-          summary: "Create a public share link for a generation",
-          description: "Returns a `share_url` that opens the PDF in a browser with **no API key**. Optionally expiring.",
-          parameters: [{ name: "transaction_id", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: {
-            required: false,
-            content: { "application/json": { schema: { type: "object", properties: {
-              ttl: { type: "string", description: "Optional expiry: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omit for a permanent link.", example: "24h" },
-            } } } },
-          },
-          responses: {
-            200: { description: "Share link created", content: { "application/json": { example: { status: "success", transaction_id: "abc123", share_url: origin + "/s/IyhShl4zIbYENM2NJWzWaA", expires_at: "2026-09-22T00:00:00.000Z" } } } },
-            401: { $ref: "#/components/responses/Unauthorized" }, 404: { $ref: "#/components/responses/GenerationNotFound" },
-          },
-        },
-      },
       "/v1/shares/{token}": {
         delete: {
           tags: ["Share"],
@@ -648,18 +630,8 @@ app.get("/v1/generations", (req, res) => {
   });
 });
 
-// Crear un enlace público compartible para una generación ya existente.
-// Body opcional: { "ttl": "24h" | 86400 }  (omitir = permanente)
-app.post("/v1/generations/:id/share", (req, res) => {
-  if (!requireKey(req, res, "generations:write")) return;
-  const id = String(req.params.id).replace(/\.pdf$/i, "");
-  if (!store.getGeneration(id) || !existsSync(store.pdfPath(id))) return res.status(404).json({ error: "generation not found" });
-  const { token, expiresAt } = store.createShare(id, parseTtl(req.body && req.body.ttl));
-  const origin = `${req.protocol}://${req.get("host")}`;
-  res.json({ status: "success", transaction_id: id, share_url: `${origin}/s/${token}`, expires_at: expiresAt });
-});
-
-// Revocar un enlace compartible (deja de funcionar de inmediato).
+// Los enlaces compartibles se crean con "share": true en POST /v1/create
+// (no hay endpoint aparte). Aquí solo se pueden revocar.
 app.delete("/v1/shares/:token", (req, res) => {
   if (!requireKey(req, res, "generations:write")) return;
   const ok = store.revokeShare(req.params.token);

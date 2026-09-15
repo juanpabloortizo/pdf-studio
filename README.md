@@ -62,7 +62,6 @@ exact shape for a template, call `GET /v1/templates/{template_id}` — it return
 | GET  | `/v1/generations` | list past generations (each with a download `url`) |
 | GET  | `/v1/generations/{transaction_id}.pdf` | download a generated PDF |
 | DELETE | `/v1/generations/{transaction_id}` | delete a generation |
-| POST | `/v1/generations/{transaction_id}/share` | create a **public** share link for a generation |
 | DELETE | `/v1/shares/{token}` | revoke a share link |
 | GET  | `/s/{token}` | **public** — open a shared PDF in the browser (no API key) |
 
@@ -115,13 +114,13 @@ The response then includes:
   "share_expires_at": "2026-09-22T00:00:00.000Z" }   // null when permanent
 ```
 
-Other ways to manage links:
+Managing links:
 
-- **Share an existing generation:** `POST /v1/generations/{transaction_id}/share`
-  with optional body `{ "ttl": "24h" }`.
 - **Revoke a link** (stops working immediately): `DELETE /v1/shares/{token}`.
 - **Open it:** `GET /s/{token}` — public, serves the PDF inline. Returns 404 once
   expired or revoked.
+
+(In the panel, the dashboard also has a "share link" action on each generated PDF.)
 
 > If you deploy behind the provided `Caddyfile`, `/s/*` is exposed publicly (like
 > `/v1/*`), while the rest of the panel stays behind the password.

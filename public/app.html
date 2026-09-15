@@ -295,7 +295,7 @@
   /* create-key modal bits */
   .klbl { display: block; font-weight: 600; font-size: 12.5px; margin: 14px 0 5px; }
   .klbl:first-of-type { margin-top: 4px; }
-  #keyName, #keyExp { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; }
+  #keyName, #keyExp { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; margin-bottom: 0; }
   .scopes { display: flex; flex-direction: column; gap: 6px; }
   .scopes label { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; cursor: pointer;
     padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; }
@@ -323,7 +323,7 @@
   .dlg h3 { margin: 0 0 6px; font-size: 17px; }
   .dlg p { margin: 0 0 16px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
   .dlg input { width: 100%; margin-bottom: 18px; }
-  .dlg-ft { display: flex; justify-content: flex-end; gap: 10px; }
+  .dlg-ft { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 </style>
 </head>
 <body>
@@ -1211,11 +1211,11 @@ let currentEp = "create";
 function apiExamples() {
   const t = sampleTplId;
   return {
-    create:  { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","export_type":"pdf","data":{"client":"Sample Client","total":119000}}`, out: "cotizacion.pdf" },
-    listTpl: { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
-    getTpl:  { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
-    listGen: { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
-    share:   { label: "Create a share link — POST /v1/generations/{id}/share", method: "POST", path: "/v1/generations/TRANSACTION_ID/share", body: `{"ttl":"7d"}` },
+    create:     { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client","total":119000}}` },
+    createShare:{ label: "Generate a PDF + public link — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client"},"share":true,"share_ttl":"7d"}` },
+    listTpl:    { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
+    getTpl:     { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
+    listGen:    { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
   };
 }
 function fillEpSel() {
