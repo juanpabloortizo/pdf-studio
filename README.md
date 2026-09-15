@@ -101,8 +101,8 @@ can hand it to a client or embed it.
 {
   "template_id": "tpl_xxxxxxxx",
   "data": { "client": "Sample Client" },
-  "share": true,           // ← also return a public link
-  "share_ttl": "7d"        // ← optional expiry: "30m" / "24h" / "7d" / seconds. Omit = permanent
+  "share": false,          // ← set true to also return a public link (default: false)
+  "share_ttl": "7d"        // ← expiry: "30m" / "24h" / "7d" / seconds. Omitted → 7 days. null or "never" = permanent
 }
 ```
 

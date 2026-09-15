@@ -471,11 +471,11 @@ function buildOpenApi(origin) {
                   output_name: { type: "string", description: "Optional file name for the generated PDF (shown in history & used on download)", example: "quote-0001.pdf" },
                   export_type: { type: "string", enum: ["pdf", "base64"], default: "base64", description: "`pdf` = raw binary download · `base64` = JSON with the file + a download url" },
                   data: { type: "object", description: "Variables keyed by name (see GET /v1/templates/{id} → sample_data)", example: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], total: 119000 } },
-                  share: { type: "boolean", description: "If true, also creates a PUBLIC shareable link (`share_url`) that opens the PDF in a browser with no API key.", example: true },
-                  share_ttl: { type: "string", description: "Optional expiry for the share link: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omit for a permanent link.", example: "7d" },
+                  share: { type: "boolean", default: false, description: "If `true`, also creates a PUBLIC shareable link (`share_url`) that opens the PDF in a browser with no API key. Defaults to `false`.", example: false },
+                  share_ttl: { type: "string", default: "7d", description: "Expiry for the share link: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omitted → **7 days**. Pass `null` or `\"never\"` for a permanent link.", example: "7d" },
                 },
               },
-              example: { template_id: "tpl_1234abcd", export_type: "base64", share: true, share_ttl: "7d", data: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], subtotal: 100000, tax: 19000, total: 119000 } },
+              example: { template_id: "tpl_1234abcd", export_type: "base64", share: false, share_ttl: "7d", data: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], subtotal: 100000, tax: 19000, total: 119000 } },
             } },
           },
           responses: {
@@ -587,11 +587,13 @@ app.post("/v1/create", async (req, res) => {
     const filename = cleanFilename(output_name, name);
     const id = store.logGeneration({ template_id: name, source: "api", pdf: Buffer.from(pdf), output: filename });
     const origin = `${req.protocol}://${req.get("host")}`;
-    // Enlace público opcional ("share": true). "share_ttl" define expiración
-    // (segundos o "30m"/"24h"/"7d"); si se omite, el enlace es permanente.
+    // Enlace público opcional ("share": true, por defecto false). "share_ttl"
+    // define la expiración (segundos o "30m"/"24h"/"7d"); si se omite, por
+    // defecto es 7 días. Pasa null/"never" para un enlace permanente.
     let shareInfo = null;
     if (share) {
-      const { token, expiresAt } = store.createShare(id, parseTtl(share_ttl));
+      const ttl = share_ttl === undefined ? 7 * 86400 : parseTtl(share_ttl);
+      const { token, expiresAt } = store.createShare(id, ttl);
       shareInfo = { share_url: `${origin}/s/${token}`, share_expires_at: expiresAt };
     }
     if (export_type === "pdf") {

@@ -1220,11 +1220,11 @@ let currentEp = "create";
 function apiExamples() {
   const t = sampleTplId;
   return {
-    create:     { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client","total":119000}}` },
-    createShare:{ label: "Generate a PDF + public link — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client"},"share":true,"share_ttl":"7d"}` },
-    listTpl:    { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
-    getTpl:     { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
-    listGen:    { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
+    create:  { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client","total":119000},"share":false,"share_ttl":"7d"}` },
+    listTpl: { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
+    getTpl:  { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
+    delTpl:  { label: "Delete a template — DELETE /v1/templates/{id}", method: "DELETE", path: `/v1/templates/${t}` },
+    listGen: { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
   };
 }
 function fillEpSel() {
