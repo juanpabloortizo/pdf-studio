@@ -47,6 +47,9 @@ exact shape for a template, call `GET /v1/templates/{template_id}` — it return
 | GET  | `/v1/generations` | list past generations (each with a download `url`) |
 | GET  | `/v1/generations/{transaction_id}.pdf` | download a generated PDF |
 | DELETE | `/v1/generations/{transaction_id}` | delete a generation |
+| POST | `/v1/generations/{transaction_id}/share` | create a **public** share link for a generation |
+| DELETE | `/v1/shares/{token}` | revoke a share link |
+| GET  | `/s/{token}` | **public** — open a shared PDF in the browser (no API key) |
 
 `template_id` accepts the template's **UUID** (`tpl_…`, shown on each card) or its name.
 
@@ -71,6 +74,42 @@ curl -X POST http://localhost:8088/v1/create \
 - `export_type: "pdf"`    → raw PDF binary (download/attach).
 - `export_type: "base64"` (default) → JSON `{ status, transaction_id, url, bytes, file: <base64> }`.
   The `url` lets you fetch the same PDF later (with your API key).
+
+### Shareable links (public)
+
+`share` is an **optional add-on** — the PDF is generated exactly as usual; setting
+`share: true` just adds a public `share_url` to the response. Anyone with that link
+opens the PDF in a browser **without an API key** (like a signed storage URL), so you
+can hand it to a client or embed it.
+
+```jsonc
+// request body add-ons for POST /v1/create
+{
+  "template_id": "tpl_xxxxxxxx",
+  "data": { "client": "Sample Client" },
+  "share": true,           // ← also return a public link
+  "share_ttl": "7d"        // ← optional expiry: "30m" / "24h" / "7d" / seconds. Omit = permanent
+}
+```
+
+The response then includes:
+
+```jsonc
+{ "status": "success", "transaction_id": "abc123", "url": "…", "file": "<base64>",
+  "share_url": "https://your-host/s/IyhShl4zIbYENM2NJWzWaA",
+  "share_expires_at": "2026-09-22T00:00:00.000Z" }   // null when permanent
+```
+
+Other ways to manage links:
+
+- **Share an existing generation:** `POST /v1/generations/{transaction_id}/share`
+  with optional body `{ "ttl": "24h" }`.
+- **Revoke a link** (stops working immediately): `DELETE /v1/shares/{token}`.
+- **Open it:** `GET /s/{token}` — public, serves the PDF inline. Returns 404 once
+  expired or revoked.
+
+> If you deploy behind the provided `Caddyfile`, `/s/*` is exposed publicly (like
+> `/v1/*`), while the rest of the panel stays behind the password.
 
 ## Templates
 

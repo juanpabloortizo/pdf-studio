@@ -458,15 +458,17 @@ function buildOpenApi(origin) {
                   output_name: { type: "string", description: "Optional file name for the generated PDF (shown in history & used on download)", example: "quote-0001.pdf" },
                   export_type: { type: "string", enum: ["pdf", "base64"], default: "base64", description: "`pdf` = raw binary download · `base64` = JSON with the file + a download url" },
                   data: { type: "object", description: "Variables keyed by name (see GET /v1/templates/{id} → sample_data)", example: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], total: 119000 } },
+                  share: { type: "boolean", description: "If true, also creates a PUBLIC shareable link (`share_url`) that opens the PDF in a browser with no API key.", example: true },
+                  share_ttl: { type: "string", description: "Optional expiry for the share link: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omit for a permanent link.", example: "7d" },
                 },
               },
-              example: { template_id: "tpl_1234abcd", export_type: "base64", data: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], subtotal: 100000, tax: 19000, total: 119000 } },
+              example: { template_id: "tpl_1234abcd", export_type: "base64", share: true, share_ttl: "7d", data: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], subtotal: 100000, tax: 19000, total: 119000 } },
             } },
           },
           responses: {
             200: { description: "Generated PDF", content: {
               "application/pdf": { schema: { type: "string", format: "binary" } },
-              "application/json": { example: { status: "success", transaction_id: "abc123", template_id: "tpl_1234abcd", name: "quote", mime_type: "application/pdf", bytes: 64502, url: origin + "/v1/generations/abc123.pdf", file: "<base64>" } },
+              "application/json": { example: { status: "success", transaction_id: "abc123", template_id: "tpl_1234abcd", name: "quote", mime_type: "application/pdf", bytes: 64502, url: origin + "/v1/generations/abc123.pdf", share_url: origin + "/s/IyhShl4zIbYENM2NJWzWaA", share_expires_at: null, file: "<base64>" } },
             } },
             401: { $ref: "#/components/responses/Unauthorized" }, 404: { $ref: "#/components/responses/NotFound" }, 429: { $ref: "#/components/responses/RateLimited" },
           },
@@ -505,6 +507,49 @@ function buildOpenApi(origin) {
           responses: {
             200: { description: "Deleted", content: { "application/json": { example: { status: "deleted", transaction_id: "abc123" } } } },
             401: { $ref: "#/components/responses/Unauthorized" }, 404: { $ref: "#/components/responses/GenerationNotFound" },
+          },
+        },
+      },
+      "/v1/generations/{transaction_id}/share": {
+        post: {
+          tags: ["Share"],
+          summary: "Create a public share link for a generation",
+          description: "Returns a `share_url` that opens the PDF in a browser with **no API key**. Optionally expiring.",
+          parameters: [{ name: "transaction_id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: false,
+            content: { "application/json": { schema: { type: "object", properties: {
+              ttl: { type: "string", description: "Optional expiry: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omit for a permanent link.", example: "24h" },
+            } } } },
+          },
+          responses: {
+            200: { description: "Share link created", content: { "application/json": { example: { status: "success", transaction_id: "abc123", share_url: origin + "/s/IyhShl4zIbYENM2NJWzWaA", expires_at: "2026-09-22T00:00:00.000Z" } } } },
+            401: { $ref: "#/components/responses/Unauthorized" }, 404: { $ref: "#/components/responses/GenerationNotFound" },
+          },
+        },
+      },
+      "/v1/shares/{token}": {
+        delete: {
+          tags: ["Share"],
+          summary: "Revoke a share link",
+          description: "The link stops working immediately.",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            200: { description: "Revoked", content: { "application/json": { example: { status: "revoked", token: "IyhShl4zIbYENM2NJWzWaA" } } } },
+            401: { $ref: "#/components/responses/Unauthorized" }, 404: { description: "Share not found", content: { "application/json": { example: { error: "share not found" } } } },
+          },
+        },
+      },
+      "/s/{token}": {
+        get: {
+          tags: ["Share"],
+          summary: "Open a shared PDF (public, no API key)",
+          description: "Serves the PDF inline in the browser. This is the link you hand to a client or embed. Returns 404 if expired or revoked.",
+          security: [],
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            200: { description: "The PDF", content: { "application/pdf": { schema: { type: "string", format: "binary" } } } },
+            404: { description: "Link expired, revoked or not found" },
           },
         },
       },
