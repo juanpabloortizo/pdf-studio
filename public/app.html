@@ -158,8 +158,8 @@
   .icon-btn.danger:hover { border-color: #fecaca; color: #dc2626; background: #fef2f2; }
   .icon-btn svg { width: 15px; height: 15px; }
   td .chk, th .chk { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
-  .filter-sel { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px;
-    padding: 6px 9px; background: #fff; color: var(--ink); cursor: pointer; max-width: 170px; }
+  .filter-sel { font: inherit; font-size: 13px; border: 1px solid var(--line); border-radius: 9px;
+    padding: 8px 11px; background: #fff; color: var(--ink); cursor: pointer; max-width: 170px; }
   .filter-sel:hover { border-color: var(--accent); }
   .fname { font-weight: 600; color: var(--ink); }
   .fsub { font-size: 11px; color: var(--muted); margin-top: 1px; }
@@ -1015,13 +1015,22 @@ function toggleMenu(e, name) {
   closeMenus();
   if (!open) {
     const r = e.currentTarget.getBoundingClientRect();
+    // Se monta en <body> para escapar de cualquier ancestro con transform
+    // (la tarjeta al hacer hover) u overflow que rompería/recortaría el popover.
+    m._home = m.parentElement;
+    document.body.appendChild(m);
     m.style.position = "fixed"; m.style.right = "auto";
     m.style.top = (r.bottom + 4) + "px";
     m.style.left = Math.max(8, r.right - 152) + "px";
     m.classList.add("show");
   }
 }
-function closeMenus() { document.querySelectorAll(".menu.show").forEach((m) => m.classList.remove("show")); }
+function closeMenus() {
+  document.querySelectorAll(".menu.show").forEach((m) => {
+    m.classList.remove("show");
+    if (m._home) { m._home.appendChild(m); m._home = null; m.style.cssText = ""; }
+  });
+}
 document.addEventListener("click", closeMenus);
 document.querySelectorAll("#viewToggle button").forEach((b) => b.onclick = () => {
   viewMode = b.dataset.vm; localStorage.setItem("tplView", viewMode); tplPage = 1; renderTemplates();
