@@ -124,10 +124,13 @@ Not yet done (roadmap): multi-user login with per-user API keys and scopes.
 
 ## Deploy (Docker)
 
+Quick local container:
+
 ```bash
 docker build -t pdf-studio .
 docker run -p 8088:8088 -e API_KEY=<strong-token> pdf-studio
 ```
 
-For a server with a domain + HTTPS, see `docker-compose.yml` + `Caddyfile`
-(Caddy fetches the Let's Encrypt certificate automatically).
+**For a real server with a custom domain + automatic HTTPS**, follow the
+step-by-step guide in **[DEPLOY.md](DEPLOY.md)** (Docker Compose + Caddy; Caddy
+fetches and renews the Let's Encrypt certificate for you).
