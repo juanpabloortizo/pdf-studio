@@ -319,7 +319,7 @@ app.delete("/api/keys/:id", (req, res) => {
 app.post("/api/history/:id/share", (req, res) => {
   const id = String(req.params.id);
   if (!store.getGeneration(id) || !existsSync(store.pdfPath(id))) return res.status(404).json({ error: "generation not found" });
-  const { token, expiresAt } = store.createShare(id, null); // permanente desde la UI
+  const { token, expiresAt } = store.createShare(id, parseTtl(req.body && req.body.ttl)); // ttl opcional; sin ttl = permanente
   const origin = `${req.protocol}://${req.get("host")}`;
   res.json({ share_url: `${origin}/s/${token}`, expires_at: expiresAt });
 });

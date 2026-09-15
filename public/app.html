@@ -296,13 +296,19 @@
   .klbl { display: block; font-weight: 600; font-size: 12.5px; margin: 14px 0 5px; }
   .klbl:first-of-type { margin-top: 4px; }
   #keyName, #keyExp { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; }
-  .scopes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
-  .scopes label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; cursor: pointer; }
-  .scopes code { font-size: 11.5px; color: var(--muted); }
+  .scopes { display: flex; flex-direction: column; gap: 6px; }
+  .scopes label { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; cursor: pointer;
+    padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; }
+  .scopes label:hover { background: #f8fafc; border-color: #c7d2fe; }
+  .scopes label input { width: auto; min-width: 0; flex: 0 0 auto; margin: 2px 0 0; }
+  .scopes .sc-txt { display: flex; flex-direction: column; gap: 1px; }
+  .scopes code { font-size: 11px; color: var(--muted); }
   .snippet { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 16px; font-size: 12.5px;
     font-family: "SF Mono", Menlo, monospace; overflow-x: auto; white-space: pre; line-height: 1.55; }
-  .snip-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .snip-tabs { display: flex; gap: 6px; }
   .snip-tabs .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .snip-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
+  .ep-sel { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; margin-bottom: 12px; }
   .field { margin-bottom: 8px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 14px; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff;
@@ -321,7 +327,7 @@
 </style>
 </head>
 <body>
-  <aside class="side" id="side">
+  <aside class="side" id="side" style="visibility:hidden">
     <div class="logo"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h4M9 17h6"/></svg></span> <span class="logo-text">PDF Studio</span></div>
     <button class="collapse-btn" id="collapseBtn" title="Collapse / expand menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
     <nav class="nav">
@@ -349,7 +355,7 @@
     </div>
   </aside>
 
-  <div class="main">
+  <div class="main" style="visibility:hidden">
     <div class="topbar">
       <div>
         <h1 id="pageTitle">Dashboard</h1>
@@ -436,12 +442,17 @@
         </div>
 
         <div class="panel">
-          <div class="head">⚡ Example usage (POST /v1/create)</div>
+          <div class="head">⚡ Example usage</div>
           <div style="padding:18px">
-            <div class="snip-tabs">
-              <button class="btn sm active" data-snip="curl">cURL</button>
-              <button class="btn sm" data-snip="node">Node.js</button>
-              <button class="btn sm" data-snip="python">Python</button>
+            <label class="klbl" for="epSel" style="margin-top:0">Endpoint</label>
+            <select id="epSel" class="ep-sel"></select>
+            <div class="snip-bar">
+              <div class="snip-tabs">
+                <button class="btn sm active" data-snip="curl">cURL</button>
+                <button class="btn sm" data-snip="node">Node.js</button>
+                <button class="btn sm" data-snip="python">Python</button>
+              </div>
+              <button class="btn sm" id="snipCopy">Copy</button>
             </div>
             <div class="snippet" id="snippet"></div>
           </div>
@@ -580,9 +591,9 @@
       <input id="keyName" placeholder="e.g. n8n integration" maxlength="60" />
       <label class="klbl" for="keyExp">Expiration</label>
       <select id="keyExp">
+        <option value="30">30 days</option>
         <option value="90">90 days</option>
         <option value="365">1 year</option>
-        <option value="30">30 days</option>
         <option value="">Never expires</option>
       </select>
       <label class="klbl">Permissions</label>
@@ -602,6 +613,29 @@
       <p class="hint">Copy it now — for security the full key is shown only this once.</p>
       <div class="keybox"><code id="newKeyVal"></code><button class="btn sm" id="newKeyCopy">Copy</button></div>
       <div class="dlg-ft"><button class="btn primary" id="newKeyDone">Done</button></div>
+    </div>
+  </div>
+
+  <!-- Modal: public share link (choose expiry) -->
+  <div class="dlg-ov" id="shareOv">
+    <div class="dlg" style="width:480px">
+      <h3>Public share link</h3>
+      <p class="hint">Anyone with the link opens this PDF in a browser — no API key needed.</p>
+      <label class="klbl" for="shareExp" style="margin-top:4px">Link lifetime</label>
+      <select id="shareExp" class="ep-sel" style="margin-bottom:0">
+        <option value="">Permanent (never expires)</option>
+        <option value="1d">1 day</option>
+        <option value="7d">7 days</option>
+        <option value="30d">30 days</option>
+        <option value="90d">90 days</option>
+      </select>
+      <div id="shareResult" style="display:none;margin-top:14px">
+        <div class="keybox"><code id="shareUrlVal"></code><button class="btn sm" id="shareCopy">Copy</button></div>
+      </div>
+      <div class="dlg-ft">
+        <button class="btn" id="shareClose">Close</button>
+        <button class="btn primary" id="shareCreate">Create &amp; copy link</button>
+      </div>
     </div>
   </div>
 
@@ -825,16 +859,31 @@ async function deleteGen(id) {
   await fetch("/api/history/" + id, { method: "DELETE" });
   toast("PDF deleted"); loadDashboard();
 }
-// Crea (o reutiliza) un enlace público permanente para un PDF y lo copia.
-async function shareGen(id) {
-  try {
-    const r = await fetch("/api/history/" + id + "/share", { method: "POST" });
-    const j = await r.json();
-    if (!r.ok || !j.share_url) { toast(j.error || "Could not create link"); return; }
-    try { await navigator.clipboard.writeText(j.share_url); toast("Public link copied to clipboard"); }
-    catch { window.prompt("Public share link (copy it):", j.share_url); }
-  } catch { toast("Error creating link"); }
+// Abre el modal para elegir la vigencia del enlace y crearlo.
+let shareGenId = null;
+function shareGen(id) {
+  shareGenId = id;
+  $("#shareExp").value = "";
+  $("#shareResult").style.display = "none";
+  $("#shareCreate").disabled = false;
+  $("#shareOv").classList.add("show");
 }
+$("#shareClose").onclick = () => $("#shareOv").classList.remove("show");
+$("#shareOv").onclick = (e) => { if (e.target === $("#shareOv")) $("#shareOv").classList.remove("show"); };
+$("#shareCreate").onclick = async () => {
+  if (!shareGenId) return;
+  const ttl = $("#shareExp").value || null;
+  $("#shareCreate").disabled = true;
+  try {
+    const r = await fetch("/api/history/" + shareGenId + "/share", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ttl }) });
+    const j = await r.json();
+    if (!r.ok || !j.share_url) { toast(j.error || "Could not create link"); $("#shareCreate").disabled = false; return; }
+    $("#shareUrlVal").textContent = j.share_url;
+    $("#shareResult").style.display = "block";
+    try { await navigator.clipboard.writeText(j.share_url); toast("Link created & copied"); } catch { toast("Link created — copy it below"); }
+  } catch { toast("Error creating link"); $("#shareCreate").disabled = false; }
+};
+$("#shareCopy").onclick = () => { navigator.clipboard.writeText($("#shareUrlVal").textContent).then(() => toast("Copied")).catch(() => {}); };
 $("#delSelBtn").onclick = async () => {
   const ids = selectedGenIds();
   const all = ids.length === document.querySelectorAll(".rowchk").length;
@@ -1100,7 +1149,8 @@ async function loadApi() {
   await loadKeys();
   const tpls = await (await fetch("/api/templates")).json();
   if (tpls.length) sampleTplId = tpls[0].id;
-  renderSnippet(currentSnip);
+  fillEpSel();
+  renderSnippet();
 }
 function scopeChips(scopes) { return (scopes || []).map((s) => `<span class="scope-chip">${escHtml(s)}</span>`).join(""); }
 function fmtExp(k) {
@@ -1135,7 +1185,7 @@ async function revokeApiKey(id, name) {
 $("#newKeyBtn").onclick = () => {
   $("#keyName").value = ""; $("#keyExp").value = "90"; $("#keyErr").style.display = "none";
   $("#keyScopes").innerHTML = scopesAvailable.map((s) =>
-    `<label><input type="checkbox" value="${escAttr(s)}" checked> <span>${escHtml(SCOPE_INFO[s] || s)}<br><code>${escHtml(s)}</code></span></label>`).join("");
+    `<label><input type="checkbox" value="${escAttr(s)}" checked><span class="sc-txt"><span>${escHtml(SCOPE_INFO[s] || s)}</span><code>${escHtml(s)}</code></span></label>`).join("");
   $("#keyOv").classList.add("show");
   setTimeout(() => $("#keyName").focus(), 50);
 };
@@ -1157,19 +1207,43 @@ $("#keyCreate").onclick = async () => {
 $("#newKeyCopy").onclick = () => { navigator.clipboard.writeText($("#newKeyVal").textContent).then(() => toast("Key copied")).catch(() => {}); };
 $("#newKeyDone").onclick = () => $("#newKeyOv").classList.remove("show");
 let currentSnip = "curl";
+let currentEp = "create";
+function apiExamples() {
+  const t = sampleTplId;
+  return {
+    create:  { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","export_type":"pdf","data":{"client":"Sample Client","total":119000}}`, out: "cotizacion.pdf" },
+    listTpl: { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
+    getTpl:  { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
+    listGen: { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
+    share:   { label: "Create a share link — POST /v1/generations/{id}/share", method: "POST", path: "/v1/generations/TRANSACTION_ID/share", body: `{"ttl":"7d"}` },
+  };
+}
+function fillEpSel() {
+  const ex = apiExamples();
+  $("#epSel").innerHTML = Object.entries(ex).map(([k, v]) => `<option value="${k}">${escHtml(v.label)}</option>`).join("");
+  $("#epSel").value = currentEp;
+}
+$("#epSel").onchange = () => { currentEp = $("#epSel").value; renderSnippet(); };
+$("#snipCopy").onclick = () => { navigator.clipboard.writeText($("#snippet").textContent).then(() => toast("Code copied")).catch(() => {}); };
 document.querySelectorAll(".snip-tabs .btn").forEach((b) => b.onclick = () => {
   document.querySelectorAll(".snip-tabs .btn").forEach((x) => x.classList.remove("active"));
-  b.classList.add("active"); currentSnip = b.dataset.snip; renderSnippet(currentSnip);
+  b.classList.add("active"); currentSnip = b.dataset.snip; renderSnippet();
 });
-function renderSnippet(kind) {
-  const url = origin + "/v1/create"; const key = apiKey || "<YOUR_API_KEY>";
-  const body = `{"template_id":"${sampleTplId}","export_type":"pdf","data":{"client":"Sample Client","total":119000}}`;
-  const snips = {
-    curl: `curl -X POST ${url} \\\n  -H "X-API-KEY: ${key}" \\\n  -H "Content-Type: application/json" \\\n  -d '${body}' \\\n  --output cotizacion.pdf`,
-    node: `const res = await fetch("${url}", {\n  method: "POST",\n  headers: { "X-API-KEY": "${key}", "Content-Type": "application/json" },\n  body: JSON.stringify(${body})\n});\nconst pdf = Buffer.from(await res.arrayBuffer());`,
-    python: `import requests\nr = requests.post("${url}",\n  headers={"X-API-KEY": "${key}"},\n  json=${body})\nopen("cotizacion.pdf","wb").write(r.content)`,
-  };
-  $("#snippet").textContent = snips[kind];
+function renderSnippet() {
+  const ep = apiExamples()[currentEp] || apiExamples().create;
+  const url = origin + ep.path; const key = apiKey || "<YOUR_API_KEY>";
+  const hasBody = !!ep.body;
+  let out;
+  if (currentSnip === "curl") {
+    out = `curl -X ${ep.method} ${url} \\\n  -H "X-API-KEY: ${key}"`;
+    if (hasBody) out += ` \\\n  -H "Content-Type: application/json" \\\n  -d '${ep.body}'`;
+    if (ep.out) out += ` \\\n  --output ${ep.out}`;
+  } else if (currentSnip === "node") {
+    out = `const res = await fetch("${url}", {\n  method: "${ep.method}",\n  headers: { "X-API-KEY": "${key}"${hasBody ? ', "Content-Type": "application/json"' : ""} }${hasBody ? `,\n  body: JSON.stringify(${ep.body})` : ""}\n});\nconst data = await res.json();\nconsole.log(data);`;
+  } else {
+    out = `import requests\nr = requests.${ep.method.toLowerCase()}("${url}",\n  headers={"X-API-KEY": "${key}"}${hasBody ? `,\n  json=${ep.body}` : ""})\nprint(r.status_code, r.json())`;
+  }
+  $("#snippet").textContent = out;
 }
 
 /* ---------- Create PDF (single + batch) ---------- */
@@ -1364,6 +1438,19 @@ $("#savePwBtn").onclick = async () => {
   if (!r.ok) { $("#pwErr").textContent = j.error || "Error"; $("#pwErr").hidden = false; return; }
   $("#accCurrent").value = ""; $("#accNew").value = ""; toast("Password changed");
 };
+
+/* ---------- ESC cierra el modal abierto ---------- */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  for (const id of ["shareOv", "newKeyOv", "keyOv", "pvOv", "dlgOv"]) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains("show")) {
+      if (id === "dlgOv") closeDlg(null);
+      else { el.classList.remove("show"); if (id === "pvOv") $("#pvFrame").src = "about:blank"; }
+      break;
+    }
+  }
+});
 
 /* ---------- init ---------- */
 (async function boot() {
