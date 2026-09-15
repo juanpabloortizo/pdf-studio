@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build image & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t pdf-studio:ci .
+
+      - name: Start container
+        run: docker run -d --name pdf -p 8088:8088 -e API_KEY=ci-smoke-test pdf-studio:ci
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088/health || true)
+            if [ "$code" = "200" ]; then echo "health OK"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::health check never returned 200"
+          docker logs pdf
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f pdf || true

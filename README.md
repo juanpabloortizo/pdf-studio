@@ -1,5 +1,9 @@
 # PDF Studio — PDF generation service
 
+[![CI](https://github.com/juanpabloortizo/pdf-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/juanpabloortizo/pdf-studio/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docker image](https://img.shields.io/badge/ghcr.io-pdf--studio-2496ED?logo=docker&logoColor=white)](https://github.com/juanpabloortizo/pdf-studio/pkgs/container/pdf-studio)
+
 Self-hosted, open-source service to **design PDF templates and generate them over a REST API**.
 
 - **Engine:** HTML + CSS → PDF with Puppeteer (headless Chromium). Pixel-perfect.
@@ -177,7 +181,13 @@ Not yet done (roadmap): multi-user login with per-user API keys and scopes.
 
 ## Deploy (Docker)
 
-Quick local container:
+Use the prebuilt image (published to GHCR on every release):
+
+```bash
+docker run -p 8088:8088 -e API_KEY=<strong-token> ghcr.io/juanpabloortizo/pdf-studio:latest
+```
+
+…or build it yourself:
 
 ```bash
 docker build -t pdf-studio .
