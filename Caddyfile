@@ -1,0 +1,22 @@
+# Cambia pdf.tudominio.com por tu subdominio real (con DNS -> IP de la VM Azure).
+# Caddy saca y renueva el certificado SSL (HTTPS) automaticamente.
+pdf.tudominio.com {
+	encode gzip
+
+	# --- API publica: solo /v1/* y /health ---
+	# (protegida por su API key; ademas el server aplica rate limiting)
+	@public path /v1/* /health
+	handle @public {
+		reverse_proxy pdf-studio:8088
+	}
+
+	# --- Todo lo demas (panel, editor visual, /api/*, /docs) : PRIVADO ---
+	# Detras de usuario + contraseña. Genera el hash con:
+	#   docker run --rm caddy caddy hash-password --plaintext 'TU_CLAVE'
+	handle {
+		basic_auth {
+			admin REEMPLAZA_CON_EL_HASH
+		}
+		reverse_proxy pdf-studio:8088
+	}
+}

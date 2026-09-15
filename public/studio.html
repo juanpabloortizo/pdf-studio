@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual editor · PDF Studio</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/grapesjs@0.21.13/dist/css/grapes.min.css">
+<style>
+  :root { --accent:#4f46e5; --ink:#1f2937; --line:#e7e9f0; --muted:#6b7280; --panel:#fff; --soft:#f7f8fb; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); }
+  body { display:flex; flex-direction:column; background:var(--soft); }
+
+  /* Topbar */
+  .topbar { display:flex; align-items:center; gap:12px; padding:11px 18px; background:var(--panel); border-bottom:1px solid var(--line); z-index:6; }
+  .topbar .back { text-decoration:none; color:var(--ink); font-weight:600; font-size:13px; border:1px solid var(--line); padding:8px 13px; border-radius:10px; }
+  .topbar .back:hover { border-color:var(--accent); color:var(--accent); }
+  .topbar .name { font-weight:800; font-size:15px; letter-spacing:-.2px; }
+  .topbar .spacer { flex:1; }
+  .btn { font:inherit; font-size:13px; font-weight:600; border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:8px 14px; border-radius:10px; cursor:pointer; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.primary:hover { background:#4338ca; color:#fff; }
+  .pill { display:flex; gap:2px; background:#eef0f5; border-radius:10px; padding:3px; }
+  .pill button { border:none; background:transparent; font:inherit; font-size:12px; font-weight:600; color:var(--muted); padding:6px 12px; border-radius:8px; cursor:pointer; }
+  .pill button.active { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .undo { display:flex; gap:4px; }
+  .btn.icon { padding:8px; display:flex; align-items:center; justify-content:center; color:#475569; }
+  .btn.icon svg { width:17px; height:17px; }
+  .btn.icon:disabled { opacity:.35; cursor:default; border-color:var(--line); color:#475569; }
+
+  .workspace { flex:1; display:flex; min-height:0; }
+  .col-left, .col-right { width:264px; background:var(--panel); display:flex; flex-direction:column; flex-shrink:0; }
+  .col-left { border-right:1px solid var(--line); }
+  .col-right { border-left:1px solid var(--line); }
+  .col-center { flex:1; min-width:0; background:#e9edf3; }
+  #gjs { height:100%; border:none; }
+  .col-title { font-size:11px; text-transform:uppercase; letter-spacing:.9px; color:#9aa1ad; font-weight:800; padding:16px 18px 10px; }
+
+  /* Bloques de componentes */
+  #blocks { padding:0 12px 16px; }
+  .gjs-blocks-c { display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:4px 2px; }
+  .gjs-block { width:auto !important; min-height:auto !important; height:auto !important; margin:0 !important; padding:14px 8px !important;
+    border-radius:12px !important; border:1px solid var(--line) !important; box-shadow:none !important;
+    font-size:11.5px !important; font-weight:600 !important; color:#475569 !important; background:#fff !important;
+    display:flex !important; flex-direction:column; align-items:center; gap:8px; transition:.13s; cursor:grab; }
+  .gjs-block:hover { border-color:var(--accent) !important; color:var(--accent) !important; box-shadow:0 6px 18px rgba(79,70,229,.13) !important; transform:translateY(-1px); }
+  .gjs-block__media { width:38px; height:38px; border-radius:11px; background:#f1f2f8; display:flex; align-items:center; justify-content:center; color:#4f46e5; transition:.13s; }
+  .gjs-block:hover .gjs-block__media { background:#4f46e5; color:#fff; }
+  .gjs-block svg { width:20px; height:20px; }
+  .gjs-block-label { line-height:1.2; }
+  /* Panel de componentes claro */
+  #blocks, #blocks .gjs-one-bg, .gjs-blocks-c, .gjs-block-categories, .gjs-block-category, .gjs-blocks-no-cat { background:#fff !important; }
+  /* Categorías de componentes */
+  .gjs-block-categories { padding:2px 0; }
+  .gjs-block-category { border:none !important; }
+  .gjs-block-category .gjs-title { background:transparent !important; border:none !important; padding:14px 8px 6px !important;
+    font-size:10.5px !important; text-transform:uppercase; letter-spacing:.9px; color:#9aa1ad !important; font-weight:800 !important; }
+  .gjs-block-category .gjs-title .gjs-caret-icon { display:none; }
+  /* Fondo del lienzo uniforme */
+  .gjs-cv-canvas, .gjs-cv-canvas__frames { background:#e9edf3 !important; }
+  .gjs-cv-canvas { top:0 !important; height:100% !important; width:100% !important; }
+  /* Badges/toolbar de componente mas discretos */
+  .gjs-com-badge, .gjs-badge { background:#4f46e5 !important; font-size:10px !important; }
+  .gjs-toolbar { background:#4f46e5 !important; border-radius:7px !important; }
+
+  /* PROPIEDADES: theming claro y moderno de los managers de GrapesJS */
+  .col-right .gjs-one-bg { background-color:#fff; }
+  .col-right .gjs-two-color, .col-right .gjs-four-color { color:var(--ink); }
+  #traits, #styles { --gjs-color:#1f2937; }
+  .gjs-sm-sectors, .gjs-trt-traits { background:#fff; }
+  .gjs-sm-sector { border:none !important; }
+  .gjs-sm-sector-title, .gjs-trt-header { display:flex; align-items:center; gap:6px; background:#fff !important;
+    border:none !important; border-top:1px solid var(--line) !important; padding:13px 16px !important;
+    font-size:12px !important; font-weight:700 !important; color:#334155 !important; }
+  .gjs-sm-sector-title:hover { color:var(--accent) !important; }
+  .gjs-sm-properties, .gjs-trt-traits { padding:10px 14px 14px !important; }
+  .gjs-sm-label, .gjs-trt-trait .gjs-label, .gjs-label-wrp { font-size:11px !important; color:#8b93a1 !important; font-weight:600 !important; margin-bottom:4px; }
+  .gjs-field, .gjs-sm-field, .gjs-trt-trait .gjs-field { background:#fff !important; border:1px solid var(--line) !important;
+    border-radius:9px !important; box-shadow:none !important; }
+  .gjs-field:focus-within { border-color:var(--accent) !important; }
+  .gjs-field input, .gjs-field select, .gjs-field textarea { color:#1f2937 !important; font-size:12.5px !important; }
+  .gjs-field .gjs-d-s-arrow { border-top-color:#94a3b8; }
+  .gjs-radio-items, .gjs-field-radio { border:1px solid var(--line) !important; border-radius:9px !important; overflow:hidden; }
+  .gjs-radio-item { border-color:var(--line) !important; }
+  .gjs-radio-item-label { font-size:11px !important; color:#64748b; }
+  .gjs-radio-item input:checked + .gjs-radio-item-label { background:var(--accent) !important; color:#fff !important; }
+  .gjs-field-color-picker { border-radius:6px; }
+  .gjs-sm-sector:first-child .gjs-sm-sector-title { border-top:none !important; }
+  .empty-props { padding:36px 18px; color:#9aa1ad; font-size:13px; text-align:center; }
+
+  /* Modal importar */
+  .overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); display:none; align-items:center; justify-content:center; z-index:50; }
+  .overlay.show { display:flex; }
+  .modal { background:#fff; width:640px; max-width:92vw; border-radius:16px; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.3); }
+  .modal h3 { margin:0; padding:18px 22px; border-bottom:1px solid var(--line); font-size:16px; }
+  .modal .bd { padding:20px 22px; }
+  .modal textarea { width:100%; height:220px; border:1px solid var(--line); border-radius:10px; padding:12px; font-family:"SF Mono",Menlo,monospace; font-size:12.5px; resize:vertical; }
+  .modal .row { display:flex; gap:10px; align-items:center; margin-top:14px; }
+  .modal .ft { padding:14px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; }
+  .drop { border:2px dashed var(--line); border-radius:10px; padding:14px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; }
+  .drop:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <a class="back" href="/templates">← Back</a>
+    <span class="name" id="tplName">template</span>
+    <div class="undo">
+      <button class="btn icon" id="btnUndo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg></button>
+      <button class="btn icon" id="btnRedo" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/></svg></button>
+    </div>
+    <div class="pill">
+      <button class="active" data-dev="A4">Portrait</button>
+      <button data-dev="A4L">Landscape</button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn" id="btnImport">⬆ Import HTML</button>
+    <button class="btn" id="btnCode">&lt;/&gt; Code</button>
+    <button class="btn" id="btnPreview">Preview</button>
+    <button class="btn primary" id="btnSave">Save</button>
+  </div>
+
+  <div class="workspace">
+    <div class="col-left">
+      <div class="col-title">Components</div>
+      <div id="blocks" style="flex:1; overflow:auto;"></div>
+    </div>
+    <div class="col-center"><div id="gjs"></div></div>
+    <div class="col-right">
+      <div class="col-title">Properties</div>
+      <div id="traits"></div>
+      <div id="styles" style="flex:1; overflow:auto;"></div>
+    </div>
+  </div>
+
+  <!-- Import HTML modal -->
+  <div class="overlay" id="importOverlay">
+    <div class="modal">
+      <h3>Import HTML</h3>
+      <div class="bd">
+        <p style="margin:0 0 10px; color:var(--muted); font-size:13px">Paste your HTML (with variables like <code>{{client}}</code>) or upload an <code>.html</code> file. It will be loaded onto the canvas so you can keep editing it.</p>
+        <textarea id="importText" placeholder="<html> ... </html>" spellcheck="false"></textarea>
+        <div class="row">
+          <label class="drop" style="flex:1">📄 Upload .html file
+            <input type="file" id="importFile" accept=".html,.htm,text/html" style="display:none">
+          </label>
+        </div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="importCancel">Cancel</button>
+        <button class="btn primary" id="importApply">Load to canvas</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/grapesjs@0.21.13/dist/grapes.min.js"></script>
+<script>
+// Requiere sesion: si no hay, va al login
+fetch("/api/auth/status").then((r) => r.json()).then((s) => { if (!s.authenticated) location.href = "/"; }).catch(() => {});
+const params = new URLSearchParams(location.search);
+let NAME = params.get("name") || "";
+const ID = params.get("id") || "";
+document.getElementById("tplName").textContent = NAME || "template";
+
+const QR_PH = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><rect width='120' height='120' fill='#f3f4f6' stroke='#cbd5e1'/><g fill='#334155'><rect x='16' y='16' width='30' height='30'/><rect x='74' y='16' width='30' height='30'/><rect x='16' y='74' width='30' height='30'/><rect x='58' y='58' width='12' height='12'/><rect x='86' y='74' width='12' height='12'/><rect x='74' y='90' width='12' height='12'/></g><text x='60' y='115' font-size='9' fill='#64748b' text-anchor='middle'>QR</text></svg>`);
+const BAR_PH = "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='160' height='60'><rect width='160' height='60' fill='#fff'/><g fill='#111'>${[6,14,20,30,36,46,54,64,72,80,90,100,108,118,128,138].map((x,i)=>`<rect x='${x}' y='6' width='${i%3?3:6}' height='40'/>`).join('')}</g><text x='80' y='56' font-size='9' fill='#111' text-anchor='middle'>* CODE 128 *</text></svg>`);
+const icon = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+
+const editor = grapesjs.init({
+  container: "#gjs",
+  height: "100%",
+  fromElement: false,
+  storageManager: false,
+  panels: { defaults: [] },
+  blockManager: { appendTo: "#blocks" },
+  traitManager: { appendTo: "#traits" },
+  selectorManager: { componentFirst: true },
+  styleManager: {
+    appendTo: "#styles",
+    sectors: [
+      { name: "Text", open: true, properties: [
+        { property: "font-family", name: "Font", type: "select", default: "Arial, sans-serif", options: [
+          { id: "Arial, sans-serif", name: "Arial" }, { id: "Helvetica, sans-serif", name: "Helvetica" },
+          { id: "Georgia, serif", name: "Georgia" }, { id: "'Times New Roman', serif", name: "Times New Roman" },
+          { id: "'Courier New', monospace", name: "Courier New" }, { id: "Verdana, sans-serif", name: "Verdana" },
+          { id: "system-ui, -apple-system, sans-serif", name: "System" } ] },
+        { property: "font-size", name: "Size", type: "number", units: ["px","pt","em","rem","%"], default: "14px", min: 1 },
+        { property: "font-weight", name: "Weight", type: "select", default: "400", options: [
+          { id: "300", name: "Light" }, { id: "400", name: "Normal" }, { id: "500", name: "Medium" },
+          { id: "600", name: "Semibold" }, { id: "700", name: "Bold" }, { id: "800", name: "Extra bold" } ] },
+        { property: "color", name: "Color", type: "color", default: "#1f2937" },
+        { property: "text-align", name: "Alignment", type: "radio", default: "left",
+          list: [ { value: "left", name: "Left" }, { value: "center", name: "Center" }, { value: "right", name: "Right" }, { value: "justify", name: "Justify" } ] },
+        { property: "line-height", name: "Line height", type: "number", units: ["","px","em","%"], default: "1.5" },
+        { property: "letter-spacing", name: "Letter spacing", type: "number", units: ["px","em"], default: "0px" },
+      ] },
+      { name: "Size & spacing", open: false, properties: [
+        { property: "width", name: "Width", type: "number", units: ["px","%","auto"], default: "auto" },
+        { property: "height", name: "Height", type: "number", units: ["px","%","auto"], default: "auto" },
+        { property: "padding", name: "Padding", type: "number", units: ["px","em"], default: "0px" },
+        { property: "margin", name: "Margin", type: "number", units: ["px","em","auto"], default: "0px" },
+      ] },
+      { name: "Background & border", open: false, properties: [
+        { property: "background-color", name: "Background color", type: "color", default: "transparent" },
+        { property: "border-radius", name: "Radius", type: "number", units: ["px","%"], default: "0px" },
+        { property: "border", name: "Border", type: "text", default: "" },
+        { property: "box-shadow", name: "Shadow", type: "text", default: "" },
+      ] },
+    ],
+  },
+  deviceManager: {
+    devices: [ { id: "A4", name: "A4", width: "794px" }, { id: "A4L", name: "Horizontal", width: "1123px" } ],
+  },
+});
+
+// ---- Blocks ----
+const bm = editor.BlockManager;
+const CAT_B = "Basic", CAT_D = "Data", CAT_F = "Shapes";
+bm.add("titulo", { label: "Heading", category: CAT_B, content: `<h1 style="font-size:26px;color:#111827;margin:0 0 8px">Heading</h1>`, media: icon('<path d="M4 7V5h16v2M9 19h6M12 5v14"/>') });
+bm.add("texto", { label: "Text", category: CAT_B, content: `<p style="font-size:14px;color:#374151;margin:0 0 8px">Sample text with variables like {{client}}.</p>`, media: icon('<path d="M4 6h16M4 12h16M4 18h10"/>') });
+bm.add("variable", { label: "Variable", category: CAT_B, content: `<span style="color:#4f46e5;font-weight:600">{{ variable }}</span>`, media: icon('<path d="M8 4l-2 16M18 4l-2 16M4 9h16M3 15h16"/>') });
+bm.add("imagen", { label: "Image", category: CAT_B, content: { type: "image", style: { width: "160px" } }, media: icon('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/>') });
+bm.add("tabla", { label: "Table / list", category: CAT_D, media: icon('<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14h18M9 4v16"/>'),
+  content: `<table style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0">
+  <thead><tr>
+    <th style="text-align:left;padding:8px;border-bottom:2px solid #e5e7eb;color:#6b7280">Description</th>
+    <th style="text-align:right;padding:8px;border-bottom:2px solid #e5e7eb;color:#6b7280">Qty</th>
+    <th style="text-align:right;padding:8px;border-bottom:2px solid #e5e7eb;color:#6b7280">Price</th>
+  </tr></thead>
+  <tbody>
+    <tr data-each="items">
+      <td style="padding:8px;border-bottom:1px solid #f0f1f3">{{description}}</td>
+      <td style="padding:8px;border-bottom:1px solid #f0f1f3;text-align:right">{{qty}}</td>
+      <td style="padding:8px;border-bottom:1px solid #f0f1f3;text-align:right">$ {{money price}}</td>
+    </tr>
+  </tbody></table>` });
+bm.add("qr", { label: "QR Code", category: CAT_D, media: icon('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M20 14v7M14 20h3"/>'),
+  content: `<img src="${QR_PH}" data-qr="{{code}}" style="width:110px;height:110px"/>` });
+bm.add("barcode", { label: "Barcode", category: CAT_D, media: icon('<path d="M4 5v14M8 5v14M11 5v14M14 5v14M17 5v14M20 5v14"/>'),
+  content: `<img src="${BAR_PH}" data-barcode="{{code}}" style="width:180px;height:60px"/>` });
+bm.add("forma", { label: "Rectangle", category: CAT_F, media: icon('<rect x="4" y="6" width="16" height="12" rx="2"/>'), content: `<div style="width:180px;height:70px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px"></div>` });
+bm.add("linea", { label: "Line", category: CAT_F, media: icon('<path d="M4 12h16"/>'), content: `<div style="width:100%;height:2px;background:#111827;margin:10px 0"></div>` });
+bm.add("espacio", { label: "Spacer", category: CAT_F, media: icon('<path d="M4 9h16M4 15h16"/>'), content: `<div style="height:24px"></div>` });
+
+// Traits: solo "Valor/variable" en QR/Barcode; el resto sin ID/Título (inútiles aquí)
+editor.on("component:selected", (c) => {
+  const attrs = c.getAttributes();
+  let hasTraits = true;
+  if (c.get("tagName") === "img" && "data-qr" in attrs) c.set("traits", [{ type: "text", name: "data-qr", label: "Value / variable (e.g. {{code}})" }]);
+  else if (c.get("tagName") === "img" && "data-barcode" in attrs) c.set("traits", [{ type: "text", name: "data-barcode", label: "Value / variable (e.g. {{code}})" }]);
+  else { c.set("traits", []); hasTraits = false; }
+  const tr = document.getElementById("traits");
+  if (tr) tr.style.display = hasTraits ? "block" : "none";
+});
+
+// ---- Canvas A4 centrado (estilo inyectado, no se exporta) ----
+function styleCanvas() {
+  try {
+    const fdoc = editor.Canvas.getDocument();
+    if (!fdoc || !fdoc.head) return;
+    let st = fdoc.getElementById("__sheet");
+    if (!st) { st = fdoc.createElement("style"); st.id = "__sheet"; fdoc.head.appendChild(st); }
+    const w = editor.getDevice() === "A4L" ? 1123 : 794;
+    st.innerHTML = `html{background:#e9edf3 !important;padding:0 !important;}
+      body{box-sizing:border-box !important;width:${w}px !important;min-height:1123px !important;
+      margin:32px auto !important;background:#fff !important;padding:56px !important;
+      box-shadow:0 12px 48px rgba(15,23,42,.18) !important;border-radius:3px !important;}`;
+  } catch {}
+}
+// Reaplica el estilo del canvas varias veces (por si el frame aun no estaba listo)
+function styleCanvasSoon() { [60, 200, 500, 900].forEach((t) => setTimeout(styleCanvas, t)); }
+
+// ---- Cargar / importar ----
+let sampleBlock = "";
+function normalizeEach(raw) {
+  return raw.replace(/\{\{#each\s+([\w.]+)\s*\}\}\s*(<tr\b[\s\S]*?<\/tr>)\s*\{\{\/each\}\}/g,
+    (_, name, row) => row.replace(/<tr\b/, `<tr data-each="${name}"`));
+}
+function importHtml(raw) {
+  const m = raw.match(/<!--\s*SAMPLE[\s\S]*?SAMPLE\s*-->/);
+  sampleBlock = m ? m[0] + "\n" : sampleBlock;
+  raw = normalizeEach(raw);
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  const css = [...doc.querySelectorAll("style")].map((s) => s.textContent).join("\n");
+  const body = doc.body ? doc.body.innerHTML : raw;
+  editor.setComponents(body || "<p>Start designing…</p>");
+  editor.setStyle(css || "");
+  styleCanvasSoon();
+}
+async function load() {
+  if (!NAME && ID) {
+    const list = await (await fetch("/api/templates")).json();
+    const found = list.find((x) => x.id === ID);
+    NAME = found ? found.name : "template";
+  }
+  if (!NAME) NAME = "template";
+  document.getElementById("tplName").textContent = NAME;
+  const t = await (await fetch("/api/template/" + NAME)).json();
+  importHtml(t.html || "");
+}
+editor.on("load", () => {
+  load();
+  // Hide the dashed component borders -> clean sheet
+  try { editor.stopCommand("sw-visibility"); } catch {}
+  // Start a fresh undo history after loading the template
+  try { editor.UndoManager.clear(); } catch {}
+  refreshUndo();
+});
+editor.on("canvas:frame:load", styleCanvas);
+editor.on("change:device", styleCanvas);
+
+// ---- Undo / Redo ----
+const um = editor.UndoManager;
+function refreshUndo() {
+  try {
+    document.getElementById("btnUndo").disabled = !um.hasUndo();
+    document.getElementById("btnRedo").disabled = !um.hasRedo();
+  } catch {}
+}
+document.getElementById("btnUndo").onclick = () => { um.undo(); styleCanvasSoon(); refreshUndo(); };
+document.getElementById("btnRedo").onclick = () => { um.redo(); styleCanvasSoon(); refreshUndo(); };
+editor.on("update", refreshUndo);
+editor.on("component:add component:remove component:update", refreshUndo);
+
+// ---- Exportar / guardar ----
+function exportHtml() {
+  const css = editor.getCss({ avoidProtected: true });
+  const body = editor.getHtml();
+  return `${sampleBlock}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  body { margin:0; padding:40px; font-family:-apple-system,Arial,sans-serif; color:#1f2937; }
+  ${css}
+</style></head>
+<body>${body}</body></html>`;
+}
+async function save() {
+  await fetch("/api/template/" + NAME, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html: exportHtml() }) });
+  const b = document.getElementById("btnSave"); const t = b.textContent; b.textContent = "Saved ✓"; setTimeout(() => (b.textContent = t), 1400);
+}
+document.getElementById("btnSave").onclick = save;
+document.getElementById("btnCode").onclick = async () => { await save(); location.href = "/templates"; };
+document.getElementById("btnPreview").onclick = async () => {
+  const sample = (() => { const m = sampleBlock.match(/<!--\s*SAMPLE([\s\S]*?)SAMPLE\s*-->/); try { return JSON.parse(m[1].trim()); } catch { return {}; } })();
+  const r = await fetch("/api/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html: exportHtml(), data: sample }) });
+  window.open(URL.createObjectURL(await r.blob()), "_blank");
+};
+
+// ---- Importar HTML (modal) ----
+const ov = document.getElementById("importOverlay");
+document.getElementById("btnImport").onclick = () => ov.classList.add("show");
+document.getElementById("importCancel").onclick = () => ov.classList.remove("show");
+ov.onclick = (e) => { if (e.target === ov) ov.classList.remove("show"); };
+document.getElementById("importFile").onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader(); rd.onload = () => (document.getElementById("importText").value = rd.result); rd.readAsText(f);
+};
+document.getElementById("importApply").onclick = () => {
+  const raw = document.getElementById("importText").value.trim();
+  if (!raw) return ov.classList.remove("show");
+  importHtml(raw); ov.classList.remove("show");
+};
+
+// ---- Orientación ----
+document.querySelectorAll(".pill button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".pill button").forEach((x) => x.classList.remove("active"));
+  b.classList.add("active"); editor.setDevice(b.dataset.dev); styleCanvasSoon();
+});
+</script>
+</body>
+</html>

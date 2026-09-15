@@ -1,0 +1,30 @@
+services:
+  pdf-mcp:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Define API_KEY en un archivo .env junto a este compose (no lo subas a git)
+      API_KEY: ${API_KEY}
+    volumes:
+      # Plantillas y datos (historial, PDFs, API key) persisten entre despliegues
+      - ./templates:/app/templates
+      - ./data:/app/data
+    expose:
+      - "8088"          # solo visible para Caddy, NO al exterior
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - pdf-mcp
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

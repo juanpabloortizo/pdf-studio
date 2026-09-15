@@ -1,0 +1,22 @@
+{
+  "name": "pdf-studio",
+  "version": "1.0.0",
+  "description": "Self-hosted, open-source PDF generation service. Design HTML templates and generate PDFs over a REST API.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["pdf", "pdf-generator", "html-to-pdf", "puppeteer", "handlebars", "rest-api", "self-hosted", "template"],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "bwip-js": "^4.11.4",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "handlebars": "^4.7.9",
+    "puppeteer": "^25.11.0",
+    "qrcode": "^1.5.4"
+  }
+}

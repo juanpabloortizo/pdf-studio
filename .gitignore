@@ -1,0 +1,20 @@
+# Dependencies
+node_modules
+
+# Secrets / env
+.env
+.env.local
+
+# Generated runtime data — NEVER commit (PDFs, history, SQLite DB with accounts, thumbnails)
+data/
+
+# User-created templates — don't ship personal templates in the open-source repo.
+# Everything under templates/ is ignored EXCEPT the generic demo templates below.
+templates/*.html
+!templates/cotizacion.html
+!templates/recibo.html
+
+# Misc
+*.pdf
+.DS_Store
+npm-debug.log

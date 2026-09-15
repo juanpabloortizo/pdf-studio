@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Docs · PDF Studio</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+<style>
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: #0f172a; color: #fff; }
+  .topbar a { color: #a5b4fc; text-decoration: none; font-weight: 600; font-size: 13px; border: 1px solid #334155; padding: 7px 12px; border-radius: 9px; }
+  .topbar a:hover { border-color: #6366f1; }
+  .topbar .brand { font-weight: 800; font-size: 15px; }
+  .topbar .spacer { flex: 1; }
+  .topbar .note { font-size: 12px; color: #94a3b8; }
+  #swagger { max-width: 1000px; margin: 0 auto; }
+  .swagger-ui .topbar { display: none; }
+  .swagger-ui .info { margin: 24px 0; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/api">← Back to app</a>
+    <span class="brand">PDF Studio · API Docs</span>
+    <span class="spacer"></span>
+    <span class="note">Click "Authorize" and paste your API key to try requests.</span>
+  </div>
+  <div id="swagger"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script>
+    fetch("/api/auth/status").then((r) => r.json()).then((s) => { if (!s.authenticated) location.href = "/"; }).catch(() => {});
+    window.ui = SwaggerUIBundle({
+      url: "/openapi.json",
+      dom_id: "#swagger",
+      deepLinking: true,
+      persistAuthorization: true,
+      tryItOutEnabled: true,
+      presets: [SwaggerUIBundle.presets.apis],
+      layout: "BaseLayout",
+    });
+  </script>
+</body>
+</html>
