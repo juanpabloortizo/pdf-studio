@@ -3,9 +3,9 @@
 pdf.yourdomain.com {
 	encode gzip
 
-	# --- Public API: only /v1/* and /health ---
-	# (protected by the API key; the server also applies rate limiting)
-	@public path /v1/* /health
+	# --- Public: API (/v1/*), health, and public share links (/s/*) ---
+	# (/v1/* is protected by the API key; /s/* links carry their own token)
+	@public path /v1/* /health /s/*
 	handle @public {
 		reverse_proxy pdf-studio:8088
 	}

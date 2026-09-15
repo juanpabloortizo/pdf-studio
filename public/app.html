@@ -1168,6 +1168,8 @@ function bShowResult(j) {
 let authMode = "login";
 function showAuth(mode) {
   authMode = mode;
+  // La pantalla de acceso vive en /login (la URL lo refleja).
+  if (location.pathname !== "/login") history.replaceState({}, "", "/login");
   $("#authGate").hidden = false;
   document.querySelector(".side").style.visibility = "hidden";
   document.querySelector(".main").style.visibility = "hidden";
@@ -1213,7 +1215,10 @@ function startApp(user, toDashboard) {
   $("#authGate").hidden = true;
   document.querySelector(".side").style.visibility = "visible";
   document.querySelector(".main").style.visibility = "visible";
-  if (toDashboard) navigate("dashboard");   // tras login: siempre al dashboard
+  // tras login: siempre al dashboard. Si ya venía autenticado pero la URL es
+  // /login (o raíz), corrige la URL a /dashboard en vez de dejar /login.
+  const path = location.pathname.replace(/^\//, "").split("/")[0];
+  if (toDashboard || !path || path === "login") navigate("dashboard");
   else show(viewFromPath());
   resetIdle(); // arranca el auto-logout por inactividad
 }
