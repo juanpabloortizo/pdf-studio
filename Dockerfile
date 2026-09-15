@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-bookworm-slim
 
 # Librerias del sistema: Chromium (headless) + toolchain para compilar
 # better-sqlite3 si no hubiera binario prebuilt para la arquitectura.
