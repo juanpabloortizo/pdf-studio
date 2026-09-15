@@ -579,7 +579,17 @@ function cleanFilename(s, fallback) {
 app.post("/v1/create", async (req, res) => {
   if (!requireKey(req, res, "pdf:create")) return;
   const body = req.body || {};
-  const { template_id, data, export_type, output_name, share, share_ttl } = body;
+  const q = req.query || {};
+  // template_id / export_type / output_name / share / share_ttl se aceptan en el
+  // body O en la query (para poder fijarlos en la URL de una tool y que el agente
+  // solo mande las variables). El body tiene prioridad.
+  const template_id = body.template_id || q.template_id;
+  const data = body.data;
+  const export_type = body.export_type || q.export_type;
+  const output_name = body.output_name || q.output_name;
+  const shareRaw = body.share !== undefined ? body.share : q.share;
+  const share = shareRaw === true || shareRaw === "true" || shareRaw === "1";
+  const share_ttl = body.share_ttl !== undefined ? body.share_ttl : q.share_ttl;
   // template_id acepta el UUID o el nombre
   const name = template_id ? store.resolveTemplateName(template_id, (n) => safeName(n) && existsSync(tplPath(n))) : null;
   if (!name) return res.status(404).json({ error: "template_id not found" });
