@@ -1,22 +1,22 @@
 services:
-  pdf-mcp:
+  pdf-studio:
     build: .
-    restart: unless-stopped
+    restart: unless-stopped        # always-on: survives crashes and VM reboots
     environment:
-      # Define API_KEY en un archivo .env junto a este compose (no lo subas a git)
+      # Set API_KEY in a .env file next to this compose (do NOT commit it to git)
       API_KEY: ${API_KEY}
     volumes:
-      # Plantillas y datos (historial, PDFs, API key) persisten entre despliegues
+      # Templates and data (history, PDFs, API key, SQLite DB) persist across deploys
       - ./templates:/app/templates
       - ./data:/app/data
     expose:
-      - "8088"          # solo visible para Caddy, NO al exterior
+      - "8088"          # only reachable by Caddy, NOT exposed to the internet
 
   caddy:
     image: caddy:2
     restart: unless-stopped
     depends_on:
-      - pdf-mcp
+      - pdf-studio
     ports:
       - "80:80"
       - "443:443"
