@@ -533,6 +533,7 @@
       <button class="btn sm" id="edBack">← Back</button>
       <span class="title" id="edTitle">Template</span>
       <span class="spacer"></span>
+      <button class="btn sm" id="edFillData" title="Build the Data (JSON) from the template variables">↻ Fill data</button>
       <button class="btn sm" id="edFormat" title="Format / beautify the HTML + CSS">✨ Format</button>
       <button class="btn sm" id="edRefresh">Refresh preview</button>
       <button class="btn sm" id="edDownload">Download PDF</button>
@@ -1093,6 +1094,53 @@ function currentData() {
   try { return JSON.parse($("#dataEditor").value || "{}"); }
   catch (e) { throw new Error("Invalid data JSON: " + e.message); }
 }
+// ---- Auto-generar el Data (JSON) desde las variables de la plantilla ----
+const HB_KEYWORDS = ["this", "else", "each", "if", "unless", "with", "money", "multiply"];
+function setDeep(obj, path, val) {
+  const p = path.split("."); let o = obj;
+  for (let i = 0; i < p.length - 1; i++) { if (typeof o[p[i]] !== "object" || o[p[i]] === null) o[p[i]] = {}; o = o[p[i]]; }
+  if (!(p[p.length - 1] in o)) o[p[p.length - 1]] = val;
+}
+function collectVars(block, into) {
+  const mustache = /\{\{\{?([^}]*)\}\}\}?/g; let m;
+  while ((m = mustache.exec(block))) {
+    const inner = m[1];
+    if (/^\s*[#/]/.test(inner)) continue; // ignora {{#each}} / {{/each}}
+    let t; const tok = /([A-Za-z_][\w.]*)/g;
+    while ((t = tok.exec(inner))) { const name = t[1]; if (HB_KEYWORDS.includes(name.split(".")[0])) continue; setDeep(into, name, ""); }
+  }
+}
+// Construye un objeto con todas las variables en "" y las listas con un item de ejemplo.
+function autoFillData() {
+  const html = cm.getValue();
+  const obj = {}, arrays = {};
+  let m;
+  const eachRe = /\{\{#each\s+([\w.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g;
+  while ((m = eachRe.exec(html))) { const name = m[1].split(".")[0]; const item = {}; collectVars(m[2], item); arrays[name] = [item]; }
+  const trRe = /<tr[^>]*\bdata-each\s*=\s*["']([\w.]+)["'][^>]*>([\s\S]*?)<\/tr>/gi;
+  while ((m = trRe.exec(html))) { const name = m[1].split(".")[0]; const item = {}; collectVars(m[2], item); arrays[name] = [item]; }
+  const stripped = html.replace(/\{\{#each[\s\S]*?\{\{\/each\}\}/g, "").replace(/<tr[^>]*\bdata-each[\s\S]*?<\/tr>/gi, "");
+  collectVars(stripped, obj);
+  for (const k in arrays) delete obj[k];
+  return Object.assign(obj, arrays);
+}
+// Fusiona el esqueleto con lo ya escrito, conservando los valores que el usuario puso.
+function mergeKeepFilled(auto, cur) {
+  if (Array.isArray(auto)) return (Array.isArray(cur) && cur.length) ? cur : auto;
+  if (auto && typeof auto === "object") {
+    const out = {};
+    for (const k in auto) out[k] = (cur && k in cur) ? mergeKeepFilled(auto[k], cur[k]) : auto[k];
+    if (cur && typeof cur === "object") for (const k in cur) if (!(k in out)) out[k] = cur[k];
+    return out;
+  }
+  return (cur !== undefined && cur !== "" && cur !== null) ? cur : auto;
+}
+function fillDataFromVars(switchTab) {
+  let cur = {}; try { cur = JSON.parse($("#dataEditor").value || "{}"); } catch {}
+  $("#dataEditor").value = JSON.stringify(mergeKeepFilled(autoFillData(), cur), null, 2);
+  if (switchTab) document.querySelector('.ed-tab[data-tab="data"]').click();
+  renderPreview();
+}
 function showVars() {
   const html = cm.getValue(); const arrays = new Set(); let m;
   const eachRe = /\{\{#each\s+([\w.]+)/g;
@@ -1128,12 +1176,15 @@ async function openEditor(name) {
   currentName = name;
   $("#edTitle").textContent = name;
   cm.setValue(t.html);
-  $("#dataEditor").value = JSON.stringify(t.sample || {}, null, 2);
+  // Si la plantilla no trae datos de ejemplo, arma el JSON desde sus variables.
+  const sample = t.sample && Object.keys(t.sample).length ? t.sample : autoFillData();
+  $("#dataEditor").value = JSON.stringify(sample, null, 2);
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
   $("#view-editor").classList.add("active");
   setTimeout(() => { cm.refresh(); renderPreview(); }, 50);
 }
 $("#edBack").onclick = () => { navigate("templates"); };
+$("#edFillData").onclick = () => { fillDataFromVars(true); toast("Data built from variables ✓"); };
 // Formatea (beautify) el HTML + CSS pegado del editor.
 $("#edFormat").onclick = () => {
   if (!cm) return;
