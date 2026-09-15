@@ -70,10 +70,24 @@ app.use(express.static("public", {
 // URLs limpias (sin app.html#...): /dashboard, /templates, /api, /design, /docs
 const page = (f) => (_req, res) => res.sendFile(join(process.cwd(), "public", f));
 app.get("/", (_req, res) => res.redirect("/dashboard"));
-app.get(["/dashboard", "/templates", "/create", "/api", "/account"], page("app.html"));
+app.get(["/dashboard", "/templates", "/create", "/api", "/account", "/login"], page("app.html"));
 app.get("/design", page("studio.html"));
 app.get("/docs", page("docs.html"));
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Enlace público compartible de un PDF (SIN API key): se abre en el navegador.
+// El token se crea desde /v1/create ("share": true) o /v1/generations/:id/share.
+app.get("/s/:token", (req, res) => {
+  const s = store.resolveShare(req.params.token);
+  if (!s) return res.status(404).type("html").send("<!doctype html><meta charset=utf-8><title>Link unavailable</title><body style='font-family:system-ui;text-align:center;padding:80px;color:#374151'><h1>Link expired or not found</h1><p>This shared document is no longer available.</p>");
+  const p = store.pdfPath(s.id);
+  if (!existsSync(p)) return res.status(404).type("html").send("<!doctype html><meta charset=utf-8><title>Link unavailable</title><body style='font-family:system-ui;text-align:center;padding:80px;color:#374151'><h1>Document no longer available</h1>");
+  const gen = store.getGeneration(s.id);
+  const fname = (gen && gen.output) || s.id + ".pdf";
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${fname}"`);
+  res.send(readFileSync(p));
+});
 
 // Rate limit para la API publica (/v1/*): protege de abuso y DoS.
 const apiLimiter = rateLimit({
@@ -502,6 +516,18 @@ app.get("/openapi.json", (req, res) => {
   res.json(buildOpenApi(origin));
 });
 
+// Interpreta un TTL: número de segundos, o "30m"/"24h"/"7d"/"60s".
+// Devuelve segundos, o null (= enlace permanente).
+function parseTtl(v) {
+  if (v == null || v === false || v === "") return null;
+  if (typeof v === "number") return v > 0 ? Math.floor(v) : null;
+  const m = String(v).trim().match(/^(\d+)\s*([smhd])?$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  const mult = { s: 1, m: 60, h: 3600, d: 86400 }[(m[2] || "s").toLowerCase()];
+  return n > 0 ? n * mult : null;
+}
+
 // Limpia el nombre de archivo propuesto y garantiza extension .pdf
 function cleanFilename(s, fallback) {
   let out = String(s || "").trim().replace(/[\/\\:*?"<>|]+/g, "_").slice(0, 120);
@@ -512,7 +538,7 @@ function cleanFilename(s, fallback) {
 
 app.post("/v1/create", async (req, res) => {
   if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
-  const { template_id, data, export_type, output_name } = req.body || {};
+  const { template_id, data, export_type, output_name, share, share_ttl } = req.body || {};
   // template_id acepta el UUID o el nombre
   const name = template_id ? store.resolveTemplateName(template_id, (n) => safeName(n) && existsSync(tplPath(n))) : null;
   if (!name) return res.status(404).json({ error: "template_id not found" });
@@ -520,12 +546,20 @@ app.post("/v1/create", async (req, res) => {
     const pdf = await renderHtmlToPdf(readTemplate(name), data || {});
     const filename = cleanFilename(output_name, name);
     const id = store.logGeneration({ template_id: name, source: "api", pdf: Buffer.from(pdf), output: filename });
+    const origin = `${req.protocol}://${req.get("host")}`;
+    // Enlace público opcional ("share": true). "share_ttl" define expiración
+    // (segundos o "30m"/"24h"/"7d"); si se omite, el enlace es permanente.
+    let shareInfo = null;
+    if (share) {
+      const { token, expiresAt } = store.createShare(id, parseTtl(share_ttl));
+      shareInfo = { share_url: `${origin}/s/${token}`, share_expires_at: expiresAt };
+    }
     if (export_type === "pdf") {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      if (shareInfo) res.setHeader("X-Share-Url", shareInfo.share_url); // el enlace también en cabecera
       return res.send(Buffer.from(pdf));
     }
-    const origin = `${req.protocol}://${req.get("host")}`;
     res.json({
       status: "success",
       transaction_id: id,
@@ -535,6 +569,7 @@ app.post("/v1/create", async (req, res) => {
       mime_type: "application/pdf",
       bytes: pdf.length,
       url: `${origin}/v1/generations/${id}.pdf`,   // descargable con la misma API key
+      ...(shareInfo || {}),                         // share_url + share_expires_at (si se pidió)
       file: Buffer.from(pdf).toString("base64"),
     });
   } catch (e) {
@@ -553,6 +588,24 @@ app.get("/v1/generations", (req, res) => {
       created_at: h.createdAt, url: `${origin}/v1/generations/${h.id}.pdf`,
     })),
   });
+});
+
+// Crear un enlace público compartible para una generación ya existente.
+// Body opcional: { "ttl": "24h" | 86400 }  (omitir = permanente)
+app.post("/v1/generations/:id/share", (req, res) => {
+  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  const id = String(req.params.id).replace(/\.pdf$/i, "");
+  if (!store.getGeneration(id) || !existsSync(store.pdfPath(id))) return res.status(404).json({ error: "generation not found" });
+  const { token, expiresAt } = store.createShare(id, parseTtl(req.body && req.body.ttl));
+  const origin = `${req.protocol}://${req.get("host")}`;
+  res.json({ status: "success", transaction_id: id, share_url: `${origin}/s/${token}`, expires_at: expiresAt });
+});
+
+// Revocar un enlace compartible (deja de funcionar de inmediato).
+app.delete("/v1/shares/:token", (req, res) => {
+  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  const ok = store.revokeShare(req.params.token);
+  res.status(ok ? 200 : 404).json(ok ? { status: "revoked", token: req.params.token } : { error: "share not found" });
 });
 
 // Borrar una plantilla
