@@ -1,11 +1,11 @@
 import express from "express";
 import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync, unlinkSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { timingSafeEqual } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { renderHtmlToPdf, renderHtmlToImage, extractVars, extractSample } from "./lib/render.js";
 import * as store from "./lib/store.js";
 import * as auth from "./lib/auth.js";
+import * as apikeys from "./lib/apikeys.js";
 
 const PORT = process.env.PORT || 8088;
 const TPL_DIR = "templates";
@@ -13,17 +13,9 @@ const THUMB_DIR = join("data", "thumbs");
 if (!existsSync(TPL_DIR)) mkdirSync(TPL_DIR, { recursive: true });
 if (!existsSync(THUMB_DIR)) mkdirSync(THUMB_DIR, { recursive: true });
 
-// La API key vive en disco; en el primer arranque se siembra con la env API_KEY.
-store.getApiKey(process.env.API_KEY || process.env.MCP_TOKEN);
-const currentKey = () => store.getApiKey().key;
-
-// Comparacion en tiempo constante (evita ataques de timing sobre la key).
-function safeEqual(a, b) {
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
+// API keys en disco. En el primer arranque migra la key única antigua (o la env
+// API_KEY) a una key "Default" con todos los permisos. Ver lib/apikeys.js.
+apikeys.init(process.env.API_KEY || process.env.MCP_TOKEN);
 
 // --- Sesiones por cookie httpOnly ---
 const COOKIE = "pdfsid";
@@ -312,21 +304,39 @@ app.get("/api/pdf/:id", (req, res) => {
   res.send(readFileSync(p));
 });
 
-// API key management
-app.get("/api/apikey", (_req, res) => res.json(store.getApiKey()));
-app.post("/api/apikey/reset", (_req, res) => res.json(store.resetApiKey()));
-app.post("/api/apikey/log", (req, res) => res.json(store.setLogRequests(req.body && req.body.logRequests)));
+// --- Gestión de API keys (panel, requiere sesión) ---
+app.get("/api/keys", (_req, res) => res.json({ keys: apikeys.listKeys(), scopes: apikeys.SCOPES }));
+app.post("/api/keys", (req, res) => {
+  const { name, scopes, ttlDays } = req.body || {};
+  res.json(apikeys.createKey({ name, scopes, ttlDays: ttlDays ? Number(ttlDays) : null }));
+});
+app.delete("/api/keys/:id", (req, res) => {
+  const ok = apikeys.revokeKey(req.params.id);
+  res.status(ok ? 200 : 404).json(ok ? { status: "revoked", id: req.params.id } : { error: "key not found" });
+});
+
+// Crear un enlace compartible desde el panel (sesión) para un PDF del historial.
+app.post("/api/history/:id/share", (req, res) => {
+  const id = String(req.params.id);
+  if (!store.getGeneration(id) || !existsSync(store.pdfPath(id))) return res.status(404).json({ error: "generation not found" });
+  const { token, expiresAt } = store.createShare(id, null); // permanente desde la UI
+  const origin = `${req.protocol}://${req.get("host")}`;
+  res.json({ share_url: `${origin}/s/${token}`, expires_at: expiresAt });
+});
 
 // ================= Public REST API =================
-function checkApiKey(req) {
-  const key = req.headers["x-api-key"] || "";
-  const bearer = (req.headers["authorization"] || "").replace("Bearer ", "");
-  const k = currentKey();
-  return safeEqual(key, k) || safeEqual(bearer, k);
+// Valida la API key y su scope. Devuelve true si pasa; si no, responde y devuelve false.
+function requireKey(req, res, scope) {
+  const key = req.headers["x-api-key"] || (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
+  const k = apikeys.authenticate(key);
+  if (!k) { res.status(401).json({ error: "invalid or expired api key" }); return false; }
+  if (scope && !k.scopes.includes(scope)) { res.status(403).json({ error: `api key lacks required scope: ${scope}` }); return false; }
+  req.apiKey = k;
+  return true;
 }
 
 app.get("/v1/templates", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "templates:read")) return;
   res.json({ templates: listTemplates().map((name) => ({
     template_id: store.ensureTemplateMeta(name).id, name, variables: variablesOf(readTemplate(name)),
   })) });
@@ -334,7 +344,7 @@ app.get("/v1/templates", (req, res) => {
 
 // Detalle de una plantilla: sus variables y un ejemplo del cuerpo (data).
 app.get("/v1/templates/:template_id", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "templates:read")) return;
   const name = store.resolveTemplateName(req.params.template_id, (n) => safeName(n) && existsSync(tplPath(n)));
   if (!name) return res.status(404).json({ error: "template_id not found" });
   const html = readTemplate(name);
@@ -359,6 +369,9 @@ function buildOpenApi(origin) {
       description:
         "Generate PDFs from reusable HTML templates.\n\n" +
         "**Auth:** send your API key in the `X-API-KEY` header (or `Authorization: Bearer <key>`).\n\n" +
+        "**API keys & scopes:** create keys in the panel (API section), each with a name, an " +
+        "optional expiry, and scopes. Each endpoint needs a scope: `pdf:create`, `templates:read`, " +
+        "`templates:write`, `generations:read`, `generations:write`. A key missing the scope gets `403`.\n\n" +
         "**How variables work:** each template declares variables like `{{client}}` and lists " +
         "(`{{#each items}}`). When you generate a PDF you pass those in the `data` object, keyed " +
         "by name. Call `GET /v1/templates/{template_id}` to see the exact variables and a ready-made " +
@@ -582,7 +595,7 @@ function cleanFilename(s, fallback) {
 }
 
 app.post("/v1/create", async (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "pdf:create")) return;
   const { template_id, data, export_type, output_name, share, share_ttl } = req.body || {};
   // template_id acepta el UUID o el nombre
   const name = template_id ? store.resolveTemplateName(template_id, (n) => safeName(n) && existsSync(tplPath(n))) : null;
@@ -624,7 +637,7 @@ app.post("/v1/create", async (req, res) => {
 
 // Historial de generaciones (transacciones)
 app.get("/v1/generations", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "generations:read")) return;
   const origin = `${req.protocol}://${req.get("host")}`;
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   res.json({
@@ -638,7 +651,7 @@ app.get("/v1/generations", (req, res) => {
 // Crear un enlace público compartible para una generación ya existente.
 // Body opcional: { "ttl": "24h" | 86400 }  (omitir = permanente)
 app.post("/v1/generations/:id/share", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "generations:write")) return;
   const id = String(req.params.id).replace(/\.pdf$/i, "");
   if (!store.getGeneration(id) || !existsSync(store.pdfPath(id))) return res.status(404).json({ error: "generation not found" });
   const { token, expiresAt } = store.createShare(id, parseTtl(req.body && req.body.ttl));
@@ -648,14 +661,14 @@ app.post("/v1/generations/:id/share", (req, res) => {
 
 // Revocar un enlace compartible (deja de funcionar de inmediato).
 app.delete("/v1/shares/:token", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "generations:write")) return;
   const ok = store.revokeShare(req.params.token);
   res.status(ok ? 200 : 404).json(ok ? { status: "revoked", token: req.params.token } : { error: "share not found" });
 });
 
 // Borrar una plantilla
 app.delete("/v1/templates/:template_id", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "templates:write")) return;
   const name = store.resolveTemplateName(req.params.template_id, (n) => safeName(n) && existsSync(tplPath(n)));
   if (!name) return res.status(404).json({ error: "template_id not found" });
   unlinkSync(tplPath(name));
@@ -665,7 +678,7 @@ app.delete("/v1/templates/:template_id", (req, res) => {
 
 // Borrar una generación pasada
 app.delete("/v1/generations/:id", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "generations:write")) return;
   const id = String(req.params.id).replace(/\.pdf$/i, "");
   const ok = store.deleteGeneration(id);
   res.status(ok ? 200 : 404).json(ok ? { status: "deleted", transaction_id: id } : { error: "generation not found" });
@@ -673,7 +686,7 @@ app.delete("/v1/generations/:id", (req, res) => {
 
 // Descargar el PDF de una generación pasada  (/v1/generations/<id>.pdf)
 app.get("/v1/generations/:file", (req, res) => {
-  if (!checkApiKey(req)) return res.status(401).json({ error: "invalid api key" });
+  if (!requireKey(req, res, "generations:read")) return;
   const id = String(req.params.file).replace(/\.pdf$/i, "");
   const p = store.pdfPath(id);
   if (!/^[a-z0-9]+$/i.test(id) || !existsSync(p)) return res.status(404).json({ error: "generation not found" });

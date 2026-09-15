@@ -23,11 +23,26 @@ API_KEY=secret123 node server.js
 
 ## Authentication
 
-Every `/v1/*` call needs your API key:
+Every `/v1/*` call needs an API key:
 
 ```
 X-API-KEY: <your key>          # or:  Authorization: Bearer <your key>
 ```
+
+Manage keys in the panel (**API** section): create as many as you need, each with a
+**name**, an optional **expiry** (30/90 days, 1 year, or never) and **scopes** that limit
+what it can do:
+
+| Scope | Allows |
+|---|---|
+| `pdf:create` | generate PDFs (`POST /v1/create`) |
+| `templates:read` | list & read templates |
+| `templates:write` | delete templates |
+| `generations:read` | list & download generations |
+| `generations:write` | delete generations · create/revoke share links |
+
+A key that lacks the required scope gets `403`; an expired or unknown key gets `401`.
+The full key is shown **once** at creation — copy it then.
 
 ## How variables work
 

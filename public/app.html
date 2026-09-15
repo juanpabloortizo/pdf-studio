@@ -282,7 +282,23 @@
   /* API view */
   .keybox { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .keybox code { background: #0f172a; color: #a5f3fc; padding: 10px 14px; border-radius: 9px; font-size: 13px;
-    font-family: "SF Mono", Menlo, monospace; user-select: all; }
+    font-family: "SF Mono", Menlo, monospace; user-select: all; word-break: break-all; }
+  /* API keys table */
+  .keys-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .keys-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .keys-table td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .keys-table code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .scope-chip { display: inline-block; font-size: 10.5px; font-weight: 600; background: #eef2ff; color: #4338ca;
+    padding: 2px 7px; border-radius: 6px; margin: 2px 3px 2px 0; }
+  .kexp-soon { color: #b45309; } .kexp-none { color: var(--muted); }
+  /* create-key modal bits */
+  .klbl { display: block; font-weight: 600; font-size: 12.5px; margin: 14px 0 5px; }
+  .klbl:first-of-type { margin-top: 4px; }
+  #keyName, #keyExp { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; }
+  .scopes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .scopes label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; cursor: pointer; }
+  .scopes code { font-size: 11.5px; color: var(--muted); }
   .snippet { background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 16px; font-size: 12.5px;
     font-family: "SF Mono", Menlo, monospace; overflow-x: auto; white-space: pre; line-height: 1.55; }
   .snip-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
@@ -397,17 +413,15 @@
       <!-- API -->
       <section class="view" id="view-api">
         <div class="panel" style="margin-bottom:20px">
-          <div class="head">🔑 API Key</div>
+          <div class="head" style="display:flex;justify-content:space-between;align-items:center">
+            <span>🔑 API Keys</span>
+            <button class="btn sm primary" id="newKeyBtn">+ New API key</button>
+          </div>
           <div style="padding:18px">
-            <p class="hint">Authenticates every REST API call. Send it in the
-              <code>X-API-KEY</code> header (or <code>Authorization: Bearer &lt;key&gt;</code>).</p>
-            <div class="keybox">
-              <code id="apiKeyVal">••••••••••••••••••••••••</code>
-              <button class="btn sm" id="revealKeyBtn">Reveal</button>
-              <button class="btn sm" id="copyKeyBtn">Copy</button>
-              <button class="btn sm danger" id="resetKeyBtn">Regenerate</button>
-            </div>
-            <div class="hint" id="apiKeyMeta"></div>
+            <p class="hint">Each key authenticates REST API calls — send it in the
+              <code>X-API-KEY</code> header (or <code>Authorization: Bearer &lt;key&gt;</code>).
+              Give a key only the scopes it needs, and set an expiry for extra safety.</p>
+            <div id="keysWrap"></div>
           </div>
         </div>
 
@@ -555,6 +569,39 @@
         <button class="btn" id="dlgCancel">Cancel</button>
         <button class="btn primary" id="dlgOk">OK</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: create API key -->
+  <div class="dlg-ov" id="keyOv">
+    <div class="dlg" style="width:470px">
+      <h3>New API key</h3>
+      <label class="klbl" for="keyName">Name</label>
+      <input id="keyName" placeholder="e.g. n8n integration" maxlength="60" />
+      <label class="klbl" for="keyExp">Expiration</label>
+      <select id="keyExp">
+        <option value="90">90 days</option>
+        <option value="365">1 year</option>
+        <option value="30">30 days</option>
+        <option value="">Never expires</option>
+      </select>
+      <label class="klbl">Permissions</label>
+      <div class="scopes" id="keyScopes"></div>
+      <p class="hint" id="keyErr" style="color:#dc2626;display:none"></p>
+      <div class="dlg-ft">
+        <button class="btn" id="keyCancel">Cancel</button>
+        <button class="btn primary" id="keyCreate">Create key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: key created (shown once) -->
+  <div class="dlg-ov" id="newKeyOv">
+    <div class="dlg" style="width:530px">
+      <h3>API key created</h3>
+      <p class="hint">Copy it now — for security the full key is shown only this once.</p>
+      <div class="keybox"><code id="newKeyVal"></code><button class="btn sm" id="newKeyCopy">Copy</button></div>
+      <div class="dlg-ft"><button class="btn primary" id="newKeyDone">Done</button></div>
     </div>
   </div>
 
@@ -718,6 +765,7 @@ function renderHistory() {
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
     dl: '<path d="M12 3v12M7 11l5 5 5-5M5 21h14"/>',
     del: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2a5 5 0 0 0 7.07 7.07l1-1"/>',
   };
   $("#historyWrap").innerHTML = `<table><thead><tr>
       <th><input type="checkbox" class="chk" id="chkAll"></th>
@@ -735,6 +783,7 @@ function renderHistory() {
       <td><div class="row-acts">
         <button class="icon-btn" title="Preview" onclick="previewPdf('${r.id}','${fname}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I.eye}</svg></button>
         <a class="icon-btn" title="Download" href="/api/pdf/${r.id}" download="${fname}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I.dl}</svg></a>
+        <button class="icon-btn" title="Copy public share link" onclick="shareGen('${r.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I.link}</svg></button>
         <button class="icon-btn danger" title="Delete" onclick="deleteGen('${r.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I.del}</svg></button>
       </div></td>
     </tr>`; }).join("") + `</tbody></table>
@@ -775,6 +824,16 @@ async function deleteGen(id) {
   if (!ok) return;
   await fetch("/api/history/" + id, { method: "DELETE" });
   toast("PDF deleted"); loadDashboard();
+}
+// Crea (o reutiliza) un enlace público permanente para un PDF y lo copia.
+async function shareGen(id) {
+  try {
+    const r = await fetch("/api/history/" + id + "/share", { method: "POST" });
+    const j = await r.json();
+    if (!r.ok || !j.share_url) { toast(j.error || "Could not create link"); return; }
+    try { await navigator.clipboard.writeText(j.share_url); toast("Public link copied to clipboard"); }
+    catch { window.prompt("Public share link (copy it):", j.share_url); }
+  } catch { toast("Error creating link"); }
 }
 $("#delSelBtn").onclick = async () => {
   const ids = selectedGenIds();
@@ -1025,29 +1084,78 @@ $("#edDownload").onclick = async () => {
   a.href = URL.createObjectURL(blob); a.download = (currentName || "document") + ".pdf"; a.click();
 };
 
-/* ---------- API ---------- */
-let apiKey = "";
+/* ---------- API keys ---------- */
+let apiKey = "";               // solo placeholder para el snippet (ya no se revela una key)
 let sampleTplId = "<TEMPLATE_ID>";
+let scopesAvailable = [];
+const SCOPE_INFO = {
+  "pdf:create": "Generate PDFs",
+  "templates:read": "List & read templates",
+  "templates:write": "Delete templates",
+  "generations:read": "List & download generations",
+  "generations:write": "Delete generations · manage share links",
+};
 async function loadApi() {
-  const k = await (await fetch("/api/apikey")).json();
-  apiKey = k.key;
-  keyRevealed = false; renderKey();
-  $("#apiKeyMeta").textContent = "Updated: " + fmtDate(k.updatedAt);
   $("#epRest").textContent = origin + "/v1";
+  await loadKeys();
   const tpls = await (await fetch("/api/templates")).json();
   if (tpls.length) sampleTplId = tpls[0].id;
   renderSnippet(currentSnip);
 }
-let keyRevealed = false;
-function renderKey() { $("#apiKeyVal").textContent = keyRevealed ? apiKey : "•".repeat(24); $("#revealKeyBtn").textContent = keyRevealed ? "Hide" : "Reveal"; }
-$("#revealKeyBtn").onclick = () => { keyRevealed = !keyRevealed; renderKey(); };
-$("#copyKeyBtn").onclick = () => { navigator.clipboard.writeText(apiKey); toast("API key copied"); };
-$("#resetKeyBtn").onclick = async () => {
-  const ok = await appConfirm("Regenerate API key", "A new key will be created and the current one will stop working. You'll need to update any integrations that use it.", { okText: "Regenerate" });
+function scopeChips(scopes) { return (scopes || []).map((s) => `<span class="scope-chip">${escHtml(s)}</span>`).join(""); }
+function fmtExp(k) {
+  if (!k.expiresAt) return '<span class="kexp-none">Never</span>';
+  if (k.expired) return '<span style="color:#dc2626;font-weight:600">Expired</span>';
+  const days = Math.ceil((new Date(k.expiresAt) - Date.now()) / 864e5);
+  return `<span class="${days <= 14 ? "kexp-soon" : ""}">${fmtDate(k.expiresAt)} · ${days}d</span>`;
+}
+async function loadKeys() {
+  const j = await (await fetch("/api/keys")).json();
+  scopesAvailable = j.scopes || [];
+  const keys = j.keys || [];
+  if (!keys.length) { $("#keysWrap").innerHTML = `<div class="empty">No API keys yet. Create one to call the API.</div>`; return; }
+  $("#keysWrap").innerHTML = `<table class="keys-table"><thead><tr>
+      <th>Name</th><th>Key</th><th>Scopes</th><th>Expires</th><th>Last used</th><th></th></tr></thead><tbody>` +
+    keys.map((k) => `<tr>
+      <td><b>${escHtml(k.name)}</b></td>
+      <td><code>${escHtml(k.masked)}</code></td>
+      <td>${scopeChips(k.scopes)}</td>
+      <td>${fmtExp(k)}</td>
+      <td>${k.lastUsedAt ? fmtDate(k.lastUsedAt) : "—"}</td>
+      <td style="text-align:right"><button class="btn sm danger" onclick="revokeApiKey('${k.id}', '${escAttr(k.name)}')">Revoke</button></td>
+    </tr>`).join("") + `</tbody></table>`;
+}
+async function revokeApiKey(id, name) {
+  const ok = await appConfirm("Revoke API key", `"${name}" will stop working immediately. Any integration using it will break.`, { okText: "Revoke" });
   if (!ok) return;
-  const k = await (await fetch("/api/apikey/reset", { method: "POST" })).json();
-  apiKey = k.key; loadApi(); toast("New API key generated");
+  await fetch("/api/keys/" + id, { method: "DELETE" });
+  toast("API key revoked"); loadKeys();
+}
+// Modal: crear key
+$("#newKeyBtn").onclick = () => {
+  $("#keyName").value = ""; $("#keyExp").value = "90"; $("#keyErr").style.display = "none";
+  $("#keyScopes").innerHTML = scopesAvailable.map((s) =>
+    `<label><input type="checkbox" value="${escAttr(s)}" checked> <span>${escHtml(SCOPE_INFO[s] || s)}<br><code>${escHtml(s)}</code></span></label>`).join("");
+  $("#keyOv").classList.add("show");
+  setTimeout(() => $("#keyName").focus(), 50);
 };
+$("#keyCancel").onclick = () => $("#keyOv").classList.remove("show");
+$("#keyOv").onclick = (e) => { if (e.target === $("#keyOv")) $("#keyOv").classList.remove("show"); };
+$("#keyCreate").onclick = async () => {
+  const name = $("#keyName").value.trim();
+  const scopes = [...document.querySelectorAll("#keyScopes input:checked")].map((c) => c.value);
+  const err = (m) => { $("#keyErr").textContent = m; $("#keyErr").style.display = "block"; };
+  if (!name) return err("Give the key a name.");
+  if (!scopes.length) return err("Select at least one permission.");
+  const ttlDays = $("#keyExp").value ? Number($("#keyExp").value) : null;
+  const j = await (await fetch("/api/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, scopes, ttlDays }) })).json();
+  $("#keyOv").classList.remove("show");
+  $("#newKeyVal").textContent = j.key;
+  $("#newKeyOv").classList.add("show");
+  loadKeys();
+};
+$("#newKeyCopy").onclick = () => { navigator.clipboard.writeText($("#newKeyVal").textContent).then(() => toast("Key copied")).catch(() => {}); };
+$("#newKeyDone").onclick = () => $("#newKeyOv").classList.remove("show");
 let currentSnip = "curl";
 document.querySelectorAll(".snip-tabs .btn").forEach((b) => b.onclick = () => {
   document.querySelectorAll(".snip-tabs .btn").forEach((x) => x.classList.remove("active"));
