@@ -470,7 +470,7 @@ function buildOpenApi(origin) {
                   template_id: { type: "string", description: "Template UUID (tpl_…) or its name", example: "tpl_1234abcd" },
                   output_name: { type: "string", description: "Optional file name for the generated PDF (shown in history & used on download)", example: "quote-0001.pdf" },
                   export_type: { type: "string", enum: ["pdf", "base64"], default: "base64", description: "`pdf` = raw binary download · `base64` = JSON with the file + a download url" },
-                  data: { type: "object", description: "Variables keyed by name (see GET /v1/templates/{id} → sample_data)", example: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], total: 119000 } },
+                  data: { type: "object", description: "Variables keyed by name (see GET /v1/templates/{id} → sample_data). You may also pass variables flat at the top level instead of nesting them here — handy for tool builders with flat fields; `data` wins on conflicts.", example: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], total: 119000 } },
                   share: { type: "boolean", default: false, description: "If `true`, also creates a PUBLIC shareable link (`share_url`) that opens the PDF in a browser with no API key. Defaults to `false`.", example: false },
                   share_ttl: { type: "string", default: "7d", description: "Expiry for the share link: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omitted → **7 days**. Pass `null` or `\"never\"` for a permanent link.", example: "7d" },
                 },
@@ -578,12 +578,19 @@ function cleanFilename(s, fallback) {
 
 app.post("/v1/create", async (req, res) => {
   if (!requireKey(req, res, "pdf:create")) return;
-  const { template_id, data, export_type, output_name, share, share_ttl } = req.body || {};
+  const body = req.body || {};
+  const { template_id, data, export_type, output_name, share, share_ttl } = body;
   // template_id acepta el UUID o el nombre
   const name = template_id ? store.resolveTemplateName(template_id, (n) => safeName(n) && existsSync(tplPath(n))) : null;
   if (!name) return res.status(404).json({ error: "template_id not found" });
+  // Las variables pueden ir en "data" (anidado) O sueltas en el nivel de arriba
+  // (más fácil para builders de tools con campos planos). "data" tiene prioridad.
+  const RESERVED = new Set(["template_id", "data", "export_type", "output_name", "share", "share_ttl"]);
+  const flat = {};
+  for (const k in body) if (!RESERVED.has(k)) flat[k] = body[k];
+  const effectiveData = { ...flat, ...(data && typeof data === "object" ? data : {}) };
   try {
-    const pdf = await renderHtmlToPdf(readTemplate(name), data || {});
+    const pdf = await renderHtmlToPdf(readTemplate(name), effectiveData);
     const filename = cleanFilename(output_name, name);
     const id = store.logGeneration({ template_id: name, source: "api", pdf: Buffer.from(pdf), output: filename });
     const origin = `${req.protocol}://${req.get("host")}`;
