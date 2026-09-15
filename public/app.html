@@ -1427,6 +1427,9 @@ function startApp(user, toDashboard) {
   const path = location.pathname.replace(/^\//, "").split("/")[0];
   if (toDashboard || !path || path === "login") navigate("dashboard");
   else show(viewFromPath());
+  // ?edit=NAME (viene del botón "Code" del editor visual) → abre el editor de código.
+  const editName = new URLSearchParams(location.search).get("edit");
+  if (editName) { history.replaceState({}, "", "/templates"); openEditor(editName); }
   resetIdle(); // arranca el auto-logout por inactividad
 }
 
