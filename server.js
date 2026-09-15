@@ -469,7 +469,7 @@ function buildOpenApi(origin) {
                 properties: {
                   template_id: { type: "string", description: "Template UUID (tpl_…) or its name", example: "tpl_1234abcd" },
                   output_name: { type: "string", description: "Optional file name for the generated PDF (shown in history & used on download)", example: "quote-0001.pdf" },
-                  export_type: { type: "string", enum: ["pdf", "base64"], default: "base64", description: "`pdf` = raw binary download · `base64` = JSON with the file + a download url" },
+                  export_type: { type: "string", enum: ["pdf", "base64", "json"], default: "base64", description: "`pdf` = raw binary · `base64` = JSON with the file + a url · `json` = JSON metadata only (no base64 — small response, great for AI agents; use `url`/`share_url`)" },
                   data: { type: "object", description: "Variables keyed by name (see GET /v1/templates/{id} → sample_data). You may also pass variables flat at the top level instead of nesting them here — handy for tool builders with flat fields; `data` wins on conflicts.", example: { client: "Sample Client", items: [{ description: "Service", qty: 1, price: 100000 }], total: 119000 } },
                   share: { type: "boolean", default: false, description: "If `true`, also creates a PUBLIC shareable link (`share_url`) that opens the PDF in a browser with no API key. Defaults to `false`.", example: false },
                   share_ttl: { type: "string", default: "7d", description: "Expiry for the share link: `\"30m\"`, `\"24h\"`, `\"7d\"`, or seconds. Omitted → **7 days**. Pass `null` or `\"never\"` for a permanent link.", example: "7d" },
@@ -619,7 +619,7 @@ app.post("/v1/create", async (req, res) => {
       if (shareInfo) res.setHeader("X-Share-Url", shareInfo.share_url); // el enlace también en cabecera
       return res.send(Buffer.from(pdf));
     }
-    res.json({
+    const payload = {
       status: "success",
       transaction_id: id,
       template_id: store.ensureTemplateMeta(name).id,
@@ -629,8 +629,11 @@ app.post("/v1/create", async (req, res) => {
       bytes: pdf.length,
       url: `${origin}/v1/generations/${id}.pdf`,   // descargable con la misma API key
       ...(shareInfo || {}),                         // share_url + share_expires_at (si se pidió)
-      file: Buffer.from(pdf).toString("base64"),
-    });
+    };
+    // "json" = solo metadata + enlaces (sin el base64). Ideal para agentes/LLM:
+    // el contexto no se satura; usa `url` o `share_url` para el archivo.
+    if (export_type !== "json") payload.file = Buffer.from(pdf).toString("base64");
+    res.json(payload);
   } catch (e) {
     res.status(500).json({ status: "error", error: String(e && e.message ? e.message : e) });
   }
