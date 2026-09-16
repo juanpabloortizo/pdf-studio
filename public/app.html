@@ -823,7 +823,8 @@ function renderHistory() {
   histSelected.forEach((id) => { if (!matchIds.has(id)) histSelected.delete(id); });
   const total = h.length;
   const selCount = histSelected.size;
-  const pageAllSelected = rows.length > 0 && rows.every((r) => histSelected.has(r.id));
+  const allSelected = total > 0 && selCount === total;
+  const someSelected = selCount > 0 && selCount < total;
   const I = {
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
     dl: '<path d="M12 3v12M7 11l5 5 5-5M5 21h14"/>',
@@ -831,12 +832,12 @@ function renderHistory() {
     link: '<path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2a5 5 0 0 0 7.07 7.07l1-1"/>',
   };
   const banner = selCount > 0 ? `<div class="sel-banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;margin-bottom:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:13px;color:#3730a3">
-      <span><b>${selCount}</b> selected${selCount === total ? " (all)" : ""}.</span>
-      ${pageAllSelected && selCount < total ? `<a id="selAllMatch" style="cursor:pointer;font-weight:600;text-decoration:underline">Select all ${total}</a>` : ""}
+      <span><b>${selCount}</b> of ${total} selected${allSelected ? " (all)" : ""}.</span>
+      ${someSelected ? `<a id="selAllMatch" style="cursor:pointer;font-weight:600;text-decoration:underline">Select all ${total}</a>` : ""}
       <a id="selClear" style="cursor:pointer;text-decoration:underline;color:#4f46e5">Clear selection</a>
     </div>` : "";
   $("#historyWrap").innerHTML = banner + `<table><thead><tr>
-      <th><input type="checkbox" class="chk" id="chkAll" ${pageAllSelected ? "checked" : ""}></th>
+      <th><input type="checkbox" class="chk" id="chkAll" title="Select all ${total}" ${allSelected ? "checked" : ""}></th>
       <th>ID</th><th>File</th><th>Template</th><th>Source</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>` +
     rows.map((r) => {
       const fname = r.output || (r.template_id + ".pdf");
@@ -863,8 +864,10 @@ function renderHistory() {
         <button id="pgNext" ${histPage >= pages ? "disabled" : ""}>Next ›</button>
       </span>
     </div>`;
+  $("#chkAll").indeterminate = someSelected;
   $("#chkAll").onchange = (e) => {
-    rows.forEach((r) => { if (e.target.checked) histSelected.add(r.id); else histSelected.delete(r.id); });
+    if (e.target.checked) h.forEach((r) => histSelected.add(r.id));
+    else histSelected.clear();
     renderHistory();
   };
   const selAll = $("#selAllMatch"); if (selAll) selAll.onclick = () => { h.forEach((r) => histSelected.add(r.id)); renderHistory(); };
