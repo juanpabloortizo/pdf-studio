@@ -6,6 +6,8 @@ import { renderHtmlToPdf, renderHtmlToImage, extractVars, extractSample } from "
 import * as store from "./lib/store.js";
 import * as auth from "./lib/auth.js";
 import * as apikeys from "./lib/apikeys.js";
+import * as settings from "./lib/settings.js";
+import * as webhook from "./lib/webhook.js";
 
 const PORT = process.env.PORT || 8088;
 const TPL_DIR = "templates";
@@ -158,6 +160,23 @@ app.post("/api/account/password", (req, res) => {
   res.json({ ok: true });
 });
 
+// Ajustes del servicio: retención automática y webhook (requiere sesión).
+app.get("/api/settings", (_req, res) => res.json(settings.getSettings()));
+app.patch("/api/settings", (req, res) => {
+  const body = req.body || {};
+  if (body.webhook && body.webhook.url && !settings.isHttpUrl(body.webhook.url))
+    return res.status(400).json({ error: "webhook url must be a valid http(s) URL" });
+  res.json(settings.patchSettings(body));
+});
+// Envía un webhook de prueba a la URL indicada (o a la guardada).
+app.post("/api/settings/webhook/test", async (req, res) => {
+  const b = req.body || {};
+  const cfg = b.url ? { enabled: true, url: String(b.url).trim(), secret: b.secret || "" } : settings.getWebhook();
+  if (!cfg.url || !settings.isHttpUrl(cfg.url)) return res.status(400).json({ error: "no valid webhook URL configured" });
+  const r = await webhook.fire("test", { message: "PDF Studio webhook test" }, { ...cfg, enabled: true });
+  res.status(r.ok ? 200 : 502).json(r);
+});
+
 // ---------- helpers de plantillas ----------
 const safeName = (n) => /^[a-z0-9_-]+$/i.test(n);
 const tplPath = (n) => join(TPL_DIR, n + ".html");
@@ -186,9 +205,37 @@ app.get("/api/template/:name", (req, res) => {
 app.put("/api/template/:name", (req, res) => {
   const { name } = req.params;
   if (!safeName(name)) return res.status(400).json({ error: "nombre invalido (usa a-z 0-9 _ -)" });
-  writeFileSync(tplPath(name), (req.body && req.body.html) || "", "utf8");
+  const html = (req.body && req.body.html) || "";
+  // Antes de sobrescribir, guarda el contenido anterior como versión (dedup por
+  // contenido). Así el autosave/guardado del editor genera historial reversible.
+  if (existsSync(tplPath(name))) { try { store.snapshotVersion(name, readTemplate(name)); } catch {} }
+  writeFileSync(tplPath(name), html, "utf8");
   const meta = store.ensureTemplateMeta(name);
-  res.json({ ok: true, name, id: meta.id, vars: extractVars((req.body && req.body.html) || "") });
+  res.json({ ok: true, name, id: meta.id, vars: extractVars(html) });
+});
+
+// Historial de versiones de una plantilla (para el editor: ver/restaurar).
+app.get("/api/template/:name/versions", (req, res) => {
+  const { name } = req.params;
+  if (!safeName(name) || !existsSync(tplPath(name))) return res.status(404).json({ error: "no existe" });
+  res.json({ versions: store.listVersions(name) });
+});
+app.get("/api/template/:name/versions/:ts", (req, res) => {
+  const { name, ts } = req.params;
+  if (!safeName(name)) return res.status(400).json({ error: "nombre invalido" });
+  const html = store.getVersion(name, ts);
+  if (html == null) return res.status(404).json({ error: "version not found" });
+  res.json({ name, ts, html });
+});
+app.post("/api/template/:name/restore", (req, res) => {
+  const { name } = req.params;
+  const ts = req.body && req.body.ts;
+  if (!safeName(name) || !existsSync(tplPath(name))) return res.status(404).json({ error: "no existe" });
+  const html = store.getVersion(name, ts);
+  if (html == null) return res.status(404).json({ error: "version not found" });
+  try { store.snapshotVersion(name, readTemplate(name)); } catch {} // guarda la actual antes de restaurar
+  writeFileSync(tplPath(name), html, "utf8");
+  res.json({ ok: true, name, restored: ts, vars: extractVars(html) });
 });
 
 app.delete("/api/template/:name", (req, res) => {
@@ -254,6 +301,7 @@ app.post("/api/generate", async (req, res) => {
     const pdf = await renderHtmlToPdf(readTemplate(template), data || {});
     const filename = cleanFilename(output_name, template);
     const id = store.logGeneration({ template_id: template, source: "ui", pdf: Buffer.from(pdf), output: filename });
+    webhook.fireAsync("pdf.created", { id, template_id: template, source: "ui", output: filename, bytes: pdf.length });
     res.json({ ok: true, transaction_id: id, output: filename, url: `${req.protocol}://${req.get("host")}/api/pdf/${id}` });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message ? e.message : e) });
@@ -275,6 +323,7 @@ app.post("/api/generate/batch", async (req, res) => {
       const pdf = await renderHtmlToPdf(html, row || {});
       const filename = cleanFilename(prefix + "-" + (i + 1), template);
       const id = store.logGeneration({ template_id: template, source: "batch", pdf: Buffer.from(pdf), output: filename });
+      webhook.fireAsync("pdf.created", { id, template_id: template, source: "batch", output: filename, bytes: pdf.length });
       return { row: i + 1, transaction_id: id, output: filename, url: `${origin}/api/pdf/${id}` };
     } catch (e) {
       return { row: i + 1, error: String(e && e.message ? e.message : e) };
@@ -307,8 +356,12 @@ app.get("/api/pdf/:id", (req, res) => {
 // --- Gestión de API keys (panel, requiere sesión) ---
 app.get("/api/keys", (_req, res) => res.json({ keys: apikeys.listKeys(), scopes: apikeys.SCOPES }));
 app.post("/api/keys", (req, res) => {
-  const { name, scopes, ttlDays } = req.body || {};
-  res.json(apikeys.createKey({ name, scopes, ttlDays: ttlDays ? Number(ttlDays) : null }));
+  const { name, scopes, ttlDays, rateLimit } = req.body || {};
+  res.json(apikeys.createKey({ name, scopes, ttlDays: ttlDays ? Number(ttlDays) : null, rateLimit }));
+});
+app.patch("/api/keys/:id", (req, res) => {
+  const updated = apikeys.updateKey(req.params.id, { rateLimit: (req.body || {}).rateLimit });
+  res.status(updated ? 200 : 404).json(updated || { error: "key not found" });
 });
 app.delete("/api/keys/:id", (req, res) => {
   const ok = apikeys.revokeKey(req.params.id);
@@ -331,6 +384,10 @@ function requireKey(req, res, scope) {
   const k = apikeys.authenticate(key);
   if (!k) { res.status(401).json({ error: "invalid or expired api key" }); return false; }
   if (scope && !k.scopes.includes(scope)) { res.status(403).json({ error: `api key lacks required scope: ${scope}` }); return false; }
+  // Rate limit opcional por key (además del límite global por IP en /v1).
+  if (k.rateLimit && !apikeys.checkRate(k.id, k.rateLimit)) {
+    res.status(429).json({ error: `rate limit exceeded for this key (${k.rateLimit}/min)` }); return false;
+  }
   req.apiKey = k;
   return true;
 }
@@ -603,6 +660,7 @@ app.post("/v1/create", async (req, res) => {
     const pdf = await renderHtmlToPdf(readTemplate(name), effectiveData);
     const filename = cleanFilename(output_name, name);
     const id = store.logGeneration({ template_id: name, source: "api", pdf: Buffer.from(pdf), output: filename });
+    webhook.fireAsync("pdf.created", { id, template_id: name, source: "api", output: filename, bytes: pdf.length });
     const origin = `${req.protocol}://${req.get("host")}`;
     // Enlace público opcional ("share": true, por defecto false). "share_ttl"
     // define la expiración (segundos o "30m"/"24h"/"7d"); si se omite, por
@@ -691,8 +749,22 @@ app.get("/v1/generations/:file", (req, res) => {
   res.send(readFileSync(p));
 });
 
+// Retención automática: borra generaciones más viejas que settings.retentionDays.
+// Corre al arrancar y cada 6 h. Con retentionDays=0 no hace nada.
+function runRetention() {
+  try {
+    const days = settings.getRetentionDays();
+    if (days > 0) {
+      const n = store.pruneOlderThan(days);
+      if (n) console.log(`[retention] removed ${n} generation(s) older than ${days} day(s)`);
+    }
+  } catch (e) { console.warn("[retention] error:", e && e.message); }
+}
+
 app.listen(PORT, () => {
   console.log("Panel       http://localhost:" + PORT + "/");
   console.log("API         http://localhost:" + PORT + "/v1/create");
   console.log("Docs        http://localhost:" + PORT + "/docs");
+  runRetention();
+  setInterval(runRetention, 6 * 3600 * 1000);
 });
