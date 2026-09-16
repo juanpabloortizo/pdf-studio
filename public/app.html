@@ -1484,8 +1484,8 @@ function startApp(user, toDashboard) {
   resetIdle(); // arranca el auto-logout por inactividad
 }
 
-// Cierra la sesión tras 10 min sin actividad (seguridad).
-const IDLE_MS = 10 * 60 * 1000;
+// Cierra la sesión tras un buen rato sin actividad (seguridad, pero sin molestar).
+const IDLE_MS = 60 * 60 * 1000; // 60 min
 let idleTimer = null;
 function resetIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(idleLogout, IDLE_MS); }
 async function idleLogout() { idleTimer = null; try { await fetch("/api/auth/logout", { method: "POST" }); } catch {} location.reload(); }
