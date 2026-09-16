@@ -311,6 +311,10 @@
   .ep-sel { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font-size: 13px; margin-bottom: 12px; }
   .field { margin-bottom: 8px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 14px; }
+  .info-dot { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--line); color: var(--muted); font-size: 11px; font-weight: 700;
+    font-style: italic; font-family: Georgia, "Times New Roman", serif; cursor: help; user-select: none; }
+  .info-dot:hover { background: #4f46e5; color: #fff; }
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff;
     padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; z-index: 60; pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -420,13 +424,12 @@
       <section class="view" id="view-api">
         <div class="panel" style="margin-bottom:20px">
           <div class="head" style="display:flex;justify-content:space-between;align-items:center">
-            <span>🔑 API Keys</span>
+            <span style="display:inline-flex;align-items:center;gap:7px">🔑 API Keys
+              <span class="info-dot" tabindex="0" title="Each key authenticates REST API calls. Send it in the X-API-KEY header (or Authorization: Bearer &lt;key&gt;). Give a key only the scopes it needs, and set an expiry for extra safety.">i</span>
+            </span>
             <button class="btn sm primary" id="newKeyBtn">+ New API key</button>
           </div>
           <div style="padding:18px">
-            <p class="hint">Each key authenticates REST API calls. Send it in the
-              <code>X-API-KEY</code> header (or <code>Authorization: Bearer &lt;key&gt;</code>).
-              Give a key only the scopes it needs, and set an expiry for extra safety.</p>
             <div id="keysWrap"></div>
           </div>
         </div>
