@@ -424,7 +424,7 @@
             <button class="btn sm primary" id="newKeyBtn">+ New API key</button>
           </div>
           <div style="padding:18px">
-            <p class="hint">Each key authenticates REST API calls — send it in the
+            <p class="hint">Each key authenticates REST API calls. Send it in the
               <code>X-API-KEY</code> header (or <code>Authorization: Bearer &lt;key&gt;</code>).
               Give a key only the scopes it needs, and set an expiry for extra safety.</p>
             <div id="keysWrap"></div>
@@ -435,8 +435,8 @@
           <div class="head">🌐 API reference</div>
           <div style="padding:18px">
             <div class="field" style="margin-bottom:14px"><b>Base URL:</b> <code id="epRest"></code></div>
-            <p class="hint" style="margin-bottom:16px">The full, interactive reference — every endpoint, request/response shapes,
-              error codes and a live "try it out" — lives in the docs.</p>
+            <p class="hint" style="margin-bottom:16px">The full, interactive reference lives in the docs: every endpoint, request and response shapes,
+              error codes and a live "try it out".</p>
             <a class="btn primary" style="text-decoration:none" href="/docs" target="_blank">📖 Open interactive API docs</a>
           </div>
         </div>
@@ -578,6 +578,7 @@
       <h3 id="dlgTitle">Title</h3>
       <p id="dlgMsg"></p>
       <input id="dlgInput" style="display:none" />
+      <div id="dlgErr" style="display:none;color:#dc2626;font-size:13px;margin-top:8px"></div>
       <div class="dlg-ft">
         <button class="btn" id="dlgCancel">Cancel</button>
         <button class="btn primary" id="dlgOk">OK</button>
@@ -612,7 +613,7 @@
   <div class="dlg-ov" id="newKeyOv">
     <div class="dlg" style="width:530px">
       <h3>API key created</h3>
-      <p class="hint">Copy it now — for security the full key is shown only this once.</p>
+      <p class="hint">Copy it now. For security the full key is shown only this once.</p>
       <div class="keybox"><code id="newKeyVal"></code><button class="btn sm" id="newKeyCopy">Copy</button></div>
       <div class="dlg-ft"><button class="btn primary" id="newKeyDone">Done</button></div>
     </div>
@@ -622,7 +623,7 @@
   <div class="dlg-ov" id="shareOv">
     <div class="dlg" style="width:480px">
       <h3>Public share link</h3>
-      <p class="hint">Anyone with the link opens this PDF in a browser — no API key needed.</p>
+      <p class="hint">Anyone with the link opens this PDF in a browser. No API key needed.</p>
       <label class="klbl" for="shareExp" style="margin-top:4px">Link lifetime</label>
       <select id="shareExp" class="ep-sel" style="margin-bottom:0">
         <option value="">Permanent (never expires)</option>
@@ -691,11 +692,14 @@ function setupPwEye(btn, input) {
 
 /* ---------- Diálogos propios (reemplazan prompt/confirm/alert) ---------- */
 let dlgResolve = null;
-function openDlg({ title, message = "", input = false, placeholder = "", value = "", okText = "OK", cancel = true, danger = false, icon = "" }) {
+let dlgRequired = false;
+function openDlg({ title, message = "", input = false, placeholder = "", value = "", okText = "OK", cancel = true, danger = false, icon = "", required = false }) {
   $("#dlgTitle").textContent = title;
   $("#dlgMsg").textContent = message; $("#dlgMsg").style.display = message ? "block" : "none";
   const inp = $("#dlgInput");
   inp.style.display = input ? "block" : "none"; inp.value = value; inp.placeholder = placeholder;
+  dlgRequired = input && required;
+  $("#dlgErr").style.display = "none"; $("#dlgErr").textContent = "";
   $("#dlgOk").textContent = okText;
   $("#dlgOk").className = "btn " + (danger ? "danger" : "primary");
   $("#dlgCancel").style.display = cancel ? "inline-block" : "none";
@@ -708,10 +712,23 @@ function openDlg({ title, message = "", input = false, placeholder = "", value =
   return new Promise((res) => { dlgResolve = res; });
 }
 function closeDlg(val) { $("#dlgOv").classList.remove("show"); if (dlgResolve) { dlgResolve(val); dlgResolve = null; } }
-$("#dlgOk").onclick = () => closeDlg($("#dlgInput").style.display !== "none" ? $("#dlgInput").value.trim() : true);
+$("#dlgOk").onclick = () => {
+  const hasInput = $("#dlgInput").style.display !== "none";
+  if (hasInput) {
+    const val = $("#dlgInput").value.trim();
+    if (dlgRequired && !val) {
+      const err = $("#dlgErr"); err.textContent = "This field is required."; err.style.display = "block";
+      $("#dlgInput").focus();
+      return;
+    }
+    return closeDlg(val);
+  }
+  closeDlg(true);
+};
 $("#dlgCancel").onclick = () => closeDlg(null);
 $("#dlgOv").onclick = (e) => { if (e.target === $("#dlgOv")) closeDlg(null); };
 $("#dlgInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#dlgOk").click(); if (e.key === "Escape") closeDlg(null); });
+$("#dlgInput").addEventListener("input", () => { $("#dlgErr").style.display = "none"; });
 const ICO_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
 async function appPrompt(title, opts = {}) { return openDlg({ title, input: true, ...opts }); }
 async function appConfirm(title, message, opts = {}) { return openDlg({ title, message, danger: true, icon: ICO_WARN, ...opts }); }
@@ -721,7 +738,7 @@ async function appAlert(title, message) { return openDlg({ title, message, cance
 const titles = {
   dashboard: ["Dashboard", "Overview of your PDF service"],
   templates: ["Templates", "Design and manage your PDF templates"],
-  create: ["Create PDF", "Generate a PDF from a template — one, or many from a CSV"],
+  create: ["Create PDF", "Generate a PDF from a template, one at a time or many from a CSV"],
   api: ["API", "Generate PDFs from your own apps over the REST API"],
   account: ["Account", "Manage your name, email and password"],
 };
@@ -776,6 +793,7 @@ async function loadDashboard() {
   renderHistory();
 }
 let histAll = [], histPage = 1; const HIST_PER = 8;
+let histSelected = new Set();
 function filteredHistory() {
   const tpl = $("#fltTemplate").value;
   const date = $("#fltDate").value;
@@ -800,19 +818,30 @@ function renderHistory() {
   if (histPage > pages) histPage = pages;
   const start = (histPage - 1) * HIST_PER;
   const rows = h.slice(start, start + HIST_PER);
+  // Drop any selected ids that no longer match the current filter set.
+  const matchIds = new Set(h.map((r) => r.id));
+  histSelected.forEach((id) => { if (!matchIds.has(id)) histSelected.delete(id); });
+  const total = h.length;
+  const selCount = histSelected.size;
+  const pageAllSelected = rows.length > 0 && rows.every((r) => histSelected.has(r.id));
   const I = {
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
     dl: '<path d="M12 3v12M7 11l5 5 5-5M5 21h14"/>',
     del: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.07 0l2-2a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-2 2a5 5 0 0 0 7.07 7.07l1-1"/>',
   };
-  $("#historyWrap").innerHTML = `<table><thead><tr>
-      <th><input type="checkbox" class="chk" id="chkAll"></th>
+  const banner = selCount > 0 ? `<div class="sel-banner" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;margin-bottom:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;font-size:13px;color:#3730a3">
+      <span><b>${selCount}</b> selected${selCount === total ? " (all)" : ""}.</span>
+      ${pageAllSelected && selCount < total ? `<a id="selAllMatch" style="cursor:pointer;font-weight:600;text-decoration:underline">Select all ${total}</a>` : ""}
+      <a id="selClear" style="cursor:pointer;text-decoration:underline;color:#4f46e5">Clear selection</a>
+    </div>` : "";
+  $("#historyWrap").innerHTML = banner + `<table><thead><tr>
+      <th><input type="checkbox" class="chk" id="chkAll" ${pageAllSelected ? "checked" : ""}></th>
       <th>ID</th><th>File</th><th>Template</th><th>Source</th><th>Size</th><th>Date</th><th></th></tr></thead><tbody>` +
     rows.map((r) => {
       const fname = r.output || (r.template_id + ".pdf");
       return `<tr>
-      <td><input type="checkbox" class="chk rowchk" value="${r.id}" onchange="updateBulk()"></td>
+      <td><input type="checkbox" class="chk rowchk" value="${r.id}" ${histSelected.has(r.id) ? "checked" : ""} onchange="toggleGen('${r.id}', this.checked)"></td>
       <td><code class="genid" onclick="copyId('${r.id}')" title="Copy ID">${r.id}</code></td>
       <td><div class="fname">${fname}</div></td>
       <td><span class="tmpl">${r.template_id}</span></td>
@@ -834,7 +863,12 @@ function renderHistory() {
         <button id="pgNext" ${histPage >= pages ? "disabled" : ""}>Next ›</button>
       </span>
     </div>`;
-  $("#chkAll").onchange = (e) => { document.querySelectorAll(".rowchk").forEach((c) => (c.checked = e.target.checked)); updateBulk(); };
+  $("#chkAll").onchange = (e) => {
+    rows.forEach((r) => { if (e.target.checked) histSelected.add(r.id); else histSelected.delete(r.id); });
+    renderHistory();
+  };
+  const selAll = $("#selAllMatch"); if (selAll) selAll.onclick = () => { h.forEach((r) => histSelected.add(r.id)); renderHistory(); };
+  const selClear = $("#selClear"); if (selClear) selClear.onclick = () => { histSelected.clear(); renderHistory(); };
   const prev = $("#pgPrev"), next = $("#pgNext");
   if (prev) prev.onclick = () => { if (histPage > 1) { histPage--; renderHistory(); } };
   if (next) next.onclick = () => { if (histPage < pages) { histPage++; renderHistory(); } };
@@ -848,8 +882,12 @@ $("#fltDate").onchange = () => {
 };
 $("#fltFrom").onchange = () => { histPage = 1; renderHistory(); };
 $("#fltTo").onchange = () => { histPage = 1; renderHistory(); };
-function selectedGenIds() { return [...document.querySelectorAll(".rowchk:checked")].map((c) => c.value); }
-function updateBulk() { const n = selectedGenIds().length; $("#delSelBtn").hidden = n === 0; if (n) $("#delSelBtn").textContent = "Delete (" + n + ")"; }
+function selectedGenIds() { return [...histSelected]; }
+function toggleGen(id, checked) {
+  if (checked) histSelected.add(id); else histSelected.delete(id);
+  renderHistory();
+}
+function updateBulk() { const n = histSelected.size; $("#delSelBtn").hidden = n === 0; if (n) $("#delSelBtn").textContent = "Delete (" + n + ")"; }
 function previewPdf(id, fname) {
   $("#pvTitle").textContent = fname;
   $("#pvFrame").src = "/api/pdf/" + id + "#toolbar=0";
@@ -885,16 +923,21 @@ $("#shareCreate").onclick = async () => {
     if (!r.ok || !j.share_url) { toast(j.error || "Could not create link"); $("#shareCreate").disabled = false; return; }
     $("#shareUrlVal").textContent = j.share_url;
     $("#shareResult").style.display = "block";
-    try { await navigator.clipboard.writeText(j.share_url); toast("Link created & copied"); } catch { toast("Link created — copy it below"); }
+    try { await navigator.clipboard.writeText(j.share_url); toast("Link created & copied"); } catch { toast("Link created, copy it below"); }
   } catch { toast("Error creating link"); $("#shareCreate").disabled = false; }
 };
 $("#shareCopy").onclick = () => { navigator.clipboard.writeText($("#shareUrlVal").textContent).then(() => toast("Copied")).catch(() => {}); };
 $("#delSelBtn").onclick = async () => {
   const ids = selectedGenIds();
-  const all = ids.length === document.querySelectorAll(".rowchk").length;
-  const ok = await appConfirm("Delete PDFs", ids.length + " generated PDF(s) will be permanently removed." + (all ? " (all of them)" : ""), { okText: "Delete" });
+  if (!ids.length) return;
+  const all = ids.length === filteredHistory().length;
+  const msg = all
+    ? `All ${ids.length} generated PDFs will be permanently deleted from the history. This cannot be undone.`
+    : `${ids.length} generated PDF(s) will be permanently removed from the history. This cannot be undone.`;
+  const ok = await appConfirm(all ? "Delete all PDFs" : "Delete PDFs", msg, { okText: all ? `Delete all ${ids.length}` : "Delete" });
   if (!ok) return;
   await fetch("/api/history/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+  histSelected.clear();
   toast("Deleted " + ids.length); loadDashboard();
 };
 
@@ -1052,7 +1095,7 @@ async function deleteTpl(name) {
   toast("Template deleted"); loadTemplates();
 }
 $("#newTplBtn").onclick = async () => {
-  const name = await appPrompt("New template", { message: "Give it a name (letters, numbers, hyphen or underscore).", placeholder: "e.g. invoice", okText: "Create & design" });
+  const name = await appPrompt("New template", { message: "Give it a name (letters, numbers, hyphen or underscore).", placeholder: "e.g. invoice", okText: "Create & design", required: true });
   if (!name) return;
   if (!/^[a-z0-9_-]+$/i.test(name)) return appAlert("Invalid name", "Use only letters, numbers, hyphen (-) or underscore (_), no spaces.");
   await fetch("/api/template/" + name, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ html: STARTER }) });
@@ -1247,7 +1290,7 @@ async function loadKeys() {
       <td><code>${escHtml(k.masked)}</code></td>
       <td>${scopeChips(k.scopes)}</td>
       <td>${fmtExp(k)}</td>
-      <td>${k.lastUsedAt ? fmtDate(k.lastUsedAt) : "—"}</td>
+      <td>${k.lastUsedAt ? fmtDate(k.lastUsedAt) : "Never"}</td>
       <td style="text-align:right"><button class="btn sm danger" onclick="revokeApiKey('${k.id}', '${escAttr(k.name)}')">Revoke</button></td>
     </tr>`).join("") + `</tbody></table>`;
 }
@@ -1287,11 +1330,11 @@ let currentEp = "create";
 function apiExamples() {
   const t = sampleTplId;
   return {
-    create:  { label: "Generate a PDF — POST /v1/create", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client","total":119000},"share":false,"share_ttl":"7d"}` },
-    listTpl: { label: "List templates — GET /v1/templates", method: "GET", path: "/v1/templates" },
-    getTpl:  { label: "Get a template — GET /v1/templates/{id}", method: "GET", path: `/v1/templates/${t}` },
-    delTpl:  { label: "Delete a template — DELETE /v1/templates/{id}", method: "DELETE", path: `/v1/templates/${t}` },
-    listGen: { label: "List generations — GET /v1/generations", method: "GET", path: "/v1/generations" },
+    create:  { label: "Generate a PDF (POST /v1/create)", method: "POST", path: "/v1/create", body: `{"template_id":"${t}","data":{"client":"Sample Client","total":119000},"share":false,"share_ttl":"7d"}` },
+    listTpl: { label: "List templates (GET /v1/templates)", method: "GET", path: "/v1/templates" },
+    getTpl:  { label: "Get a template (GET /v1/templates/{id})", method: "GET", path: `/v1/templates/${t}` },
+    delTpl:  { label: "Delete a template (DELETE /v1/templates/{id})", method: "DELETE", path: `/v1/templates/${t}` },
+    listGen: { label: "List generations (GET /v1/generations)", method: "GET", path: "/v1/generations" },
   };
 }
 function fillEpSel() {
@@ -1342,7 +1385,7 @@ async function crLoadFields() {
   const t = await (await fetch("/api/template/" + $("#crTemplate").value)).json();
   const s = t.sample || {}, v = t.vars;
   let html = v.simple.map((f) => `<div class="fld"><label class="acc-lbl">${f}</label><input data-fld="${f}" value="${escAttr(s[f] != null ? s[f] : "")}"></div>`).join("");
-  html += v.arrays.map((a) => `<div class="fld full"><label class="acc-lbl">${a} <span style="color:#9aa1ad;font-weight:500">— list (JSON)</span></label><textarea data-arr="${a}">${escHtml(s[a] != null ? JSON.stringify(s[a], null, 2) : "[]")}</textarea></div>`).join("");
+  html += v.arrays.map((a) => `<div class="fld full"><label class="acc-lbl">${a} <span style="color:#9aa1ad;font-weight:500">list (JSON)</span></label><textarea data-arr="${a}">${escHtml(s[a] != null ? JSON.stringify(s[a], null, 2) : "[]")}</textarea></div>`).join("");
   if (!v.simple.length && !v.arrays.length) html = `<p class="hint">This template has no variables.</p>`;
   $("#crFields").innerHTML = html;
 }
@@ -1434,7 +1477,7 @@ function showAuth(mode) {
   $("#authErr").hidden = true;
   const setup = mode === "setup";
   $("#authTitle").textContent = setup ? "Create your account" : "Sign in";
-  $("#authSub").textContent = setup ? "First run — set up the owner account for this PDF Studio." : "Welcome back.";
+  $("#authSub").textContent = setup ? "First run. Set up the owner account for this PDF Studio." : "Welcome back.";
   $("#authName").hidden = !setup;
   $("#lblName").hidden = !setup;
   $("#authPass").setAttribute("autocomplete", setup ? "new-password" : "current-password");
